@@ -1,13 +1,11 @@
-from feat_viz.transforms import (
+from feat_viz.image import (
     apply_transformations,
-    rgb_to_decorrelated,
-    decorrelated_to_rgb,
+    get_image,
 )
 from feat_viz.utils import (
     create_simple_logger,
     ImagePlotter,
     is_jupyter_notebook,
-    show_tensor_image,
 )
 from feat_viz.objective import create_objective, Objective, T, M
 
@@ -47,11 +45,8 @@ class FeatureViz:
             objective = create_objective(objective)
         self.objective: Objective = objective
 
-        # if self.objective.created_from_hook:
-        #     # in case the objective was created using the Hook class,
-        #     # we need to pass the model to the objective to register the hooks
-        #     self.logger.info("Registering hooks for the objective.")
-        #     self.objective(self.model)
+        # in case the objective was created using the Hook class,
+        # we need to pass the model to the objective to register the hooks
         self.objective(self.model)
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -103,14 +98,21 @@ class FeatureViz:
                 image_shape = (1, 3, *image_shape)
             elif len(image_shape) == 3:
                 image_shape = (1, *image_shape)
+            batch, channels, height, width = image_shape
+            image = get_image(
+                w=width,
+                h=height,
+                batch=batch,
+                sd=0.5,
+                decorrelate=use_decorrelated,
+                fft=True,
+                alpha=channels == 4,
+                sigmoid=True,
+                scaling_method="min_max",
+            )
 
-            image = torch.randn(*image_shape).to(self.device)
-        else:
-            image = image.to(self.device)
+        image = image.to(self.device)
         image.requires_grad_(True)
-
-        if use_decorrelated:
-            image = rgb_to_decorrelated(image)
 
         optimizer = optim.Adam([image], lr=lr)
 
@@ -130,8 +132,6 @@ class FeatureViz:
             if i % freq == 0:
                 self.logger.info(f"Loss: {loss.item()}")
                 image_to_log = image.clone().detach().cpu()
-                if use_decorrelated:
-                    image_to_log = decorrelated_to_rgb(image_to_log)
                 images.append(image_to_log)
 
                 if is_jupyter_notebook() and plot_images:
@@ -139,4 +139,5 @@ class FeatureViz:
                         image_to_log,
                         title=f"It: {i} | Loss: {loss.item():.2f}",
                     )
+        image.detach_()
         return images
