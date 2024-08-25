@@ -15,6 +15,11 @@ from collections import OrderedDict
 
 M = nn.Module
 T = torch.Tensor
+A = np.ndarray
+END = "\033[0m"
+BOLD = "\033[1m"
+BROWN = "\033[0;33m"
+ITALIC = "\033[3m"
 
 
 def create_simple_logger(logger_name: str, level: str = "info") -> logging.Logger:
@@ -269,12 +274,6 @@ def create_grid_image_from_tensor_images(
 ) -> torch.Tensor:
     grid_image = torchvision.utils.make_grid(images, nrow=nrow)
     return grid_image
-
-
-END = "\033[0m"
-BOLD = "\033[1m"
-BROWN = "\033[0;33m"
-ITALIC = "\033[3m"
 
 
 def get_model_tree(
