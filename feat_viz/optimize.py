@@ -119,7 +119,15 @@ class FeatureViz:
         for i in tqdm(range(num_iterations)):
             transformed_image = apply_transformations(image).to(self.device)
             optimizer.zero_grad()
-            self.model(transformed_image)
+            try:
+                self.model(transformed_image)
+            except RuntimeError as ex:
+                if i == 0:
+                    # Only display the warning message
+                    # on the first iteration, no need to do that every iteration
+                    self.logger.warning(
+                        f"Some layers could not be computed because the size of the image is not big enough. It is fine, as long as the non computed layers are not used in the objective function.\nException: {ex}"
+                    )
             loss = self.objective(self.model)
             loss.backward()
             self.normalize_grad(image)
