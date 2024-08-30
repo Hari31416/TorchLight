@@ -18,7 +18,33 @@ def sum_loss(x: T):
     return -x.sum()
 
 
-def get_nth_matrix_element(matrix: T, n: int):
+def get_matrix_element_around_position(
+    matrix: T,
+    x: Optional[int] = None,
+    y: Optional[int] = None,
+    wx: int = 1,
+    wy: int = 1,
+) -> T:
+    if len(matrix.shape) < 2:
+        raise ValueError(
+            f"Matrix with less than 2 dimensions not supported. Got {len(matrix.shape)} dimensions"
+        )
+
+    if x is None:
+        x = matrix.shape[-2] // 2
+    if y is None:
+        y = matrix.shape[-1] // 2
+    return matrix[..., x : x + wx, y : y + wy]  # handle 3D+ matrices
+
+
+def get_matrix_element_at_position(
+    matrix: T, x: Optional[int] = None, y: Optional[int] = None
+) -> T:
+    """Gets the element at position (x, y) from a 2D+ matrix. If x and y are not provided, the center element is returned. Output dimensionality will be the same as the input matrix."""
+    return get_matrix_element_around_position(matrix, x, y, 1, 1)
+
+
+def get_nth_matrix_element(matrix: T, n: int) -> T:
     """Gets the nth element from an 2D and matrix.
     If 2D matrix, return the element at index n, determined by traversing the matrix row by row. For example, for a 3x3 matrix, the elements are:
     
@@ -43,21 +69,26 @@ def get_nth_matrix_element(matrix: T, n: int):
     24 25 26
 
     The slice at index 1 is: 1 10 19
-    """
-    if len(matrix.shape) > 3:
-        raise ValueError(
-            f"Matrix with more than 3 dimensions not supported. Got {len(matrix.shape)} dimensions"
-        )
 
+    Parameters
+    ----------
+    matrix : torch.Tensor
+        The matrix to extract the element from.
+    n : int
+        The index of the element to extract. The index is determined by traversing the matrix row by row.
+
+    Returns
+    -------
+    torch.Tensor
+        The element at index n from the matrix. Note that the dimensionality of the output will remain the same as the input matrix.
+    """
     if n >= matrix.numel():
         msg = f"Index {n} out of bounds for matrix of size {matrix.shape}"
         raise ValueError(msg)
 
     row = n // matrix.shape[-1]
     col = n % matrix.shape[-1]
-    if len(matrix.shape) == 2:
-        return matrix[row, col]
-    return matrix[:, row, col]
+    return get_matrix_element_at_position(matrix, row, col)
 
 
 class Hook:
@@ -75,10 +106,17 @@ class Hook:
         - slice: Slice channels from the output. The output shape will be n x height x width where n is the number of channels in the slice.
         - Tuple[int, int]: Slice channels from the output. The output shape will be n x height x width where `n = silce(channel_number[0], channel_number[1])`.
 
-    neuron_number : Optional[int], optional
-        The neuron number to extract from the channel output. If provided, the output shape will be 1 x width. By default None. To better understand how the neuron number is extracted, see the `get_nth_matrix_element` function.
+    neuron_number : Optional[Union[int, Tuple[int, int], Tuple[Tuple[int, int], Tuple[int, int]]]]
+        The neuron number to extract from the channel output. The possible types are:
+
+        - int: Select a single neuron from the channel output or activations along channel with position determined by `neuron_number` by traversing the matrix row by row (See `get_nth_matrix_element` method for details). The output shape will be `width x 1 x 1` where width is the number of channels in the slice, 1 for a single channel.
+        - Tuple[int, int]: Selects a single neuron from the channel output or activations along channel with position determined by the tuple (see `get_matrix_element_at_position` method for details). The output shape will be `width x 1 x 1` where width is the number of channels in the slice, 1 for a single channel.
+        - Tuple[Tuple[int, int], Tuple[int, int]]: Selects a slice of neurons from the channel output or activations along channel where position is determined by the first two elements of the tuple and width and height is determined by the last twp elements. (see `get_matrix_element_around_position` method for details). The output shape will be `width x m x n` where width is determined by the number of channels in the slice, m and n are determined by the last two elements of the tuple.
+
     loss_function : Callable[[T], T], optional
         The loss function to calculate the loss from the extracted features. The loss function should take a tensor as input and return a scalar value. The default is `mean_loss` which calculates the mean of the tensor.
+    extractor_function : Optional[Callable[[T], T]], optional
+        A custom function to extract features from the layer output. The function should take a tensor as input and return a tensor. By default None. The input tensor will be the output of the layer with shape batch_size x channels x height x width. The function must return a tensor that is then passed to the `loss_function` to calculate the loss.
 
     Methods
     -------
@@ -86,19 +124,44 @@ class Hook:
         Calls the hook on the model to calculate the loss. Returns the loss value.
     has_hook() -> bool:
         Returns True if the hook has been added to the model, False otherwise.
+
+    Notes
+    -----
+    Some possible ways to use the Hook class:
+
+    1. Extract a single channel from the output of a layer using the channel number:
+        ```
+        hook = Hook("layer4", channel_number=0)
+        ```
+    2. Extract a list of channels from the output of a layer using a list of channel numbers:
+        ```
+        hook = Hook("layer4", channel_number=[0, 1, 2])
+        ```
+    3. Extract a slice of activations along the channel dimension:
+        ```
+        hook = Hook("layer4", channel_number=None, neuron_number=5)
+        ```
+    4. Extract a slice of neurons from multiple channel:
+        ```
+        hook = Hook("layer4", channel_number=[0, 1, 2], neuron_number=(0, 0, 3, 3))
+        ```
     """
 
     def __init__(
         self,
         layer_name: str,
         channel_number: Optional[Union[int, List[int], Tuple[int, int], slice]] = None,
-        neuron_number: Optional[int] = None,
+        neuron_number: Optional[
+            Union[int, Tuple[int, int], Tuple[Tuple[int, int], Tuple[int, int]]]
+        ] = None,
         loss_function: Callable[[T], T] = mean_loss,
+        extractor_function: Optional[Callable[[T], T]] = None,
     ):
         self.layer_name = layer_name
         self.channel_number = channel_number
         self.neuron_number = neuron_number
         self.loss_function = loss_function
+        self.extractor_function = extractor_function
         self.feature: T = None
         self.loss: T = 0
         self.__hook = None
@@ -131,6 +194,49 @@ class Hook:
         module = model.get_submodule(self.layer_name)
         if module is None:
             raise ValueError(f"Layer {self.layer_name} not found in model")
+
+        if self.extractor_function is not None:
+            logger.info(
+                f"Adding hook to {self.layer_name} using custom extractor function"
+            )
+
+            def hook_fn(module: M, input: T, output: T) -> None:
+                self.feature = self.extractor_function(output)
+                self.loss = self.loss_function(self.feature)
+
+            self.__hook = module.register_forward_hook(hook_fn)
+            return
+
+        if self.neuron_number is not None:
+            if isinstance(self.neuron_number, tuple):
+                if isinstance(self.neuron_number[0], tuple):
+                    logger.debug(
+                        f"Adding hook to {self.layer_name} using slice of neurons"
+                    )
+                    function_for_slice = lambda x: get_matrix_element_around_position(
+                        x,
+                        *self.neuron_number[0],  # x and y
+                        *self.neuron_number[1],  # width and height
+                    )
+                else:
+                    if len(self.neuron_number) != 2:
+                        msg = f"Invalid neuron number: {self.neuron_number}. Must be a tuple of length 2."
+                        raise ValueError(msg)
+
+                    logger.debug(
+                        f"Adding hook to {self.layer_name} using a single neuron from position"
+                    )
+                    function_for_slice = lambda x: get_matrix_element_at_position(
+                        x, *self.neuron_number
+                    )
+            else:
+                logger.debug(
+                    f"Adding hook to {self.layer_name} using neuron number {self.neuron_number}"
+                )
+                function_for_slice = lambda x: get_nth_matrix_element(
+                    x, self.neuron_number
+                )
+
         if self.channel_number is None:
             logger.info(f"Adding hook to {self.layer_name}")
         else:
@@ -147,7 +253,7 @@ class Hook:
             if self.channel_number is None:
                 if self.neuron_number is not None:
                     # shape will be channels x width
-                    output = get_nth_matrix_element(self.feature, self.neuron_number)
+                    output = function_for_slice(output)
                 self.feature = output
                 output_shape = self.feature.shape
                 logger.debug(f"Output shape: {output_shape}")
@@ -180,8 +286,9 @@ class Hook:
                 # select and convert to 1 x height x width for consistency
                 output = output[self.channel_number].reshape(-1, *output.shape[1:])
             if self.neuron_number is not None:
-                # the shape will be n x width where n is the number of channels in the slice, 1 for a single channel
-                output = get_nth_matrix_element(output, self.neuron_number)
+                # the shape will be width x m x n where width is the number of channels in the slice, m and n
+                # possibly 1, are the width of slices for neurons
+                output = function_for_slice(output)
             self.feature = output
             output_shape = self.feature.shape
             logger.debug(f"Output shape: {output_shape}")
