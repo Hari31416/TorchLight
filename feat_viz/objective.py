@@ -91,6 +91,35 @@ def get_nth_matrix_element(matrix: T, n: int) -> T:
     return get_matrix_element_at_position(matrix, row, col)
 
 
+def diversity_loss(layer_output: T) -> T:
+    # Source: https://github.com/greentfrapp/lucent/blob/dev/lucent/optvis/objectives.py#L318
+    batch, channels, _, _ = layer_output.shape
+    flattened = layer_output.view(batch, channels, -1)
+    grams = torch.matmul(flattened, torch.transpose(flattened, 1, 2))
+    grams = torch.nn.functional.normalize(grams, p=2, dim=(1, 2))
+    return (
+        -sum(
+            [
+                sum([(grams[i] * grams[j]).sum() for j in range(batch) if j != i])
+                for i in range(batch)
+            ]
+        )
+        / batch
+    )
+
+
+def alignment_loss(layer_output: T, decay_ratio: int = 2) -> T:
+    # Source: https://github.com/greentfrapp/lucent/blob/dev/lucent/optvis/objectives.py#L304
+    batch_n = list(layer_output.shape)[0]
+    accum = 0
+    for d in [1, 2, 3, 4]:
+        for i in range(batch_n - d):
+            a, b = i, i + d
+            arr_a, arr_b = layer_output[a], layer_output[b]
+            accum += ((arr_a - arr_b) ** 2).mean() / decay_ratio ** float(d)
+    return accum
+
+
 class Hook:
     """A object that adds a forward hook to a layer in a model. The hook extracts features from the layer output and calculates the loss using a loss function. The loss function can be a simple function or a custom function. The hook can be called on a model to calculate the loss.
 
@@ -117,6 +146,8 @@ class Hook:
         The loss function to calculate the loss from the extracted features. The loss function should take a tensor as input and return a scalar value. The default is `mean_loss` which calculates the mean of the tensor.
     extractor_function : Optional[Callable[[T], T]], optional
         A custom function to extract features from the layer output. The function should take a tensor as input and return a tensor. By default None. The input tensor will be the output of the layer with shape batch_size x channels x height x width. The function must return a tensor that is then passed to the `loss_function` to calculate the loss.
+    extractor_function_kwargs : Optional[dict], optional
+        Keyword arguments to pass to the `extractor_function`, by default None.
 
     Methods
     -------
@@ -156,12 +187,14 @@ class Hook:
         ] = None,
         loss_function: Callable[[T], T] = mean_loss,
         extractor_function: Optional[Callable[[T], T]] = None,
+        extractor_function_kwargs: Optional[dict] = None,
     ):
         self.layer_name = layer_name
         self.channel_number = channel_number
         self.neuron_number = neuron_number
         self.loss_function = loss_function
         self.extractor_function = extractor_function
+        self.extractor_function_kwargs = extractor_function_kwargs
         self.feature: T = None
         self.loss: T = 0
         self.__hook = None
@@ -201,7 +234,9 @@ class Hook:
             )
 
             def hook_fn(module: M, input: T, output: T) -> None:
-                self.feature = self.extractor_function(output)
+                self.feature = self.extractor_function(
+                    output, **self.extractor_function_kwargs
+                )
                 self.loss = self.loss_function(self.feature)
 
             self.__hook = module.register_forward_hook(hook_fn)
