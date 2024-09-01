@@ -143,23 +143,20 @@ def get_image(
     param_f = fft_image if fft else pixel_image
     t = param_f(shape, sd=sd)
     output = convert_to_valid_rgb(
-        t[:3, ...],
+        t[:, :3, ...],
         decorrelate=decorrelate,
         sigmoid=sigmoid,
         scaling_method=scaling_method,
     )
     if alpha:
-        a = torch.nn.sigmoid(
+        a = torch.nn.functional.sigmoid(
             t[
+                :,
                 3:,
                 ...,
             ]
         )
         output = torch.cat([output, a], -1)
-    # # change to numpy convert again to torch tensor with required gradient
-    # # workaround for now to avoid error ValueError: can’t optimize a non-leaf Tensor
-    # output = output.clone().cpu().detach().numpy()
-    # output = torch.tensor(output, requires_grad=True)
     return output
 
 
