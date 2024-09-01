@@ -17,8 +17,28 @@ import torch.optim as optim
 from tqdm.auto import tqdm
 from typing import Any, Iterable, Optional, List, Union, Tuple
 import logging
+from collections import OrderedDict
 
 logger = create_simple_logger(__name__)
+
+
+def remove_all_hooks(model: torch.nn.Module) -> None:
+    """Remove all hooks from a neural network model."""
+    for name, child in model._modules.items():
+        if child is not None:
+            if hasattr(child, "_forward_hooks"):
+                if child._forward_hooks != OrderedDict():
+                    logger.info(f"Removing forward hooks from {name}")
+                    child._forward_hooks = OrderedDict()
+            elif hasattr(child, "_forward_pre_hooks"):
+                if child._forward_pre_hooks != OrderedDict():
+                    logger.info(f"Removing forward pre hooks from {name}")
+                    child._forward_pre_hooks = OrderedDict()
+            elif hasattr(child, "_backward_hooks"):
+                if child._backward_hooks != OrderedDict():
+                    logger.info(f"Removing backward hooks from {name}")
+                    child._backward_hooks = OrderedDict()
+            remove_all_hooks(child)
 
 
 class FeatureViz:
@@ -32,6 +52,10 @@ class FeatureViz:
         The objective function to optimize. If a string is passed, it will be used to create the objective function. The string must be in format "layer_name:channel_number". For example, "layer4:0" will optimize the first feature of the fourth layer. Have a look at the `feat_viz.objective.Hook` class for more information regarding `layer_name` and `channel_number`.
     logger : Optional[logging.Logger], optional
         The logger object to use, by default None. If None, a simple logger will be created.
+    wandb_logger : Optional[Any], optional
+        The Weights & Biases logger object, by default None. If None, no logging will be done.
+    remove_existing_hooks : bool, optional
+        Whether to remove existing hooks from the model, by default True. If True, all hooks will be removed before adding new ones.
     """
 
     def __init__(
@@ -40,10 +64,14 @@ class FeatureViz:
         objective: Union[Objective, str],
         logger: Optional[logging.Logger] = None,
         wandb_logger: Optional[Any] = None,
+        remove_existing_hooks: bool = True,
     ) -> None:
         self.logger = logger or create_simple_logger(__name__)
 
         self.model = model.eval()
+        if remove_existing_hooks:
+            remove_all_hooks(self.model)
+
         if isinstance(objective, str):
             objective = create_objective(objective)
         self.objective: Objective = objective
