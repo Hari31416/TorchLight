@@ -206,7 +206,12 @@ class FeatureViz:
                     )
             if i in thresholds:
                 img = image.squeeze(0).detach().cpu().numpy()
-                img = np.transpose(img, (1, 2, 0))
+                rank = len(img.shape)
+                if rank == 3:
+                    img = np.transpose(img, (1, 2, 0))
+                else:
+                    # multiple images
+                    img = np.transpose(img, (0, 2, 3, 1))
                 images.append(img)
 
         image.detach_()

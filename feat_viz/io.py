@@ -247,7 +247,23 @@ def show_image(
     fmt : str, optional
         The image format, by default 'png'
     """
-    _display_html(_image_html(array, width=width, domain=domain, fmt=fmt))
+    rank = len(array.shape)
+    if rank == 3:
+        logger.debug("Displaying a single image.")
+        # a single image
+        _display_html(_image_html(array, width=width, domain=domain, fmt=fmt))
+    elif rank == 4:
+        logger.debug("Displaying a sequence of images.")
+        # a sequence of images
+        images = [array[i] for i in range(array.shape[0])]
+        show_images(
+            images=images,
+            labels=[str(i) for i in range(len(images))],
+            domain=domain,
+            width=width,
+            fmt=fmt,
+            n_cols=len(images),
+        )
 
 
 def _create_image_table(
