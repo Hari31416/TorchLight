@@ -220,12 +220,17 @@ def _image_html(
     width: Optional[int] = None,
     domain: Optional[Tuple[float, float]] = None,
     fmt: str = "png",
+    title: Optional[str] = "",
 ) -> str:
     url = _image_url(array, domain=domain, fmt=fmt)
     style = "image-rendering: pixelated;"
     if width is not None:
         style += "width: {width}px;".format(width=width)
-    return """<img src="{url}" style="{style}">""".format(url=url, style=style)
+    if title:
+        title_h = "<h4>{title}</h4>".format(title=title)
+    else:
+        title_h = ""
+    return f"""{title_h}<img src="{url}" style="{style}" alt={title}>"""
 
 
 def show_image(
@@ -233,6 +238,7 @@ def show_image(
     domain: Optional[Tuple[float, float]] = None,
     width: Optional[int] = None,
     fmt: str = "png",
+    title: Optional[str] = "",
 ) -> None:
     """Display an image.
 
@@ -246,12 +252,27 @@ def show_image(
         The width of the output image, by default None. If None, the size will be unchanged.
     fmt : str, optional
         The image format, by default 'png'
+    title : Optional[str], optional
+        The title of the image, by default ""
     """
     rank = len(array.shape)
     if rank == 3:
+        if width is None:
+            width = int(
+                array.shape[1] * 1.2
+            )  # default to the 120% of width of the image since the image will be wrapped in a div
         logger.debug("Displaying a single image.")
         # a single image
-        _display_html(_image_html(array, width=width, domain=domain, fmt=fmt))
+        image_html = _image_html(
+            array, width=width, domain=domain, fmt=fmt, title=title
+        )
+        final_html = f"""<div style="width:{width}px;text-align:center;">
+        <figure>
+        {image_html}
+        </figure>
+        </div>
+        """
+        _display_html(final_html)
     elif rank == 4:
         logger.debug("Displaying a sequence of images.")
         # a sequence of images
@@ -272,7 +293,7 @@ def _create_image_table(
     domain: Optional[Tuple[float, float]] = None,
     width: Optional[int] = None,
     fmt: str = "png",
-    n_cols: Optional[int] = None,
+    n_rows: Optional[int] = None,
 ):
     """Create an HTML table of images.
 
@@ -286,7 +307,7 @@ def _create_image_table(
         The domain of the input array, by default None. If None, the domain will be inferred from the array.
     width : Optional[int], optional
         The width of the output image, by default None. If None, the size will be unchanged.
-    n_cols : Optional[int], optional
+    n_rows : Optional[int], optional
         The number of columns in the output table, by default None. If None, the number of columns will be the square root of the number of images.
 
     Returns
@@ -294,18 +315,28 @@ def _create_image_table(
     str
         The HTML table of images.
     """
-    n_cols = n_cols or np.ceil(np.sqrt(len(images))).astype(int)
-    n_rows = len(images) // n_cols
+    n_rows = n_rows or np.ceil(np.sqrt(len(images))).astype(int)
+    n_cols = len(images) // n_rows
     if n_rows * n_cols < len(images):
         n_rows += 1
-    images_html = "<table>"
+
+    images_html = """<style>
+    td:hover {
+        transition: transform 0.5s;
+        transform: scale(1.1);
+        }
+    </style>
+    <table style='border-collapse: collapse;'>
+    """
     for i in range(n_rows):
         images_html += "<tr>"
         for j in range(n_cols):
             idx = i * n_cols + j
             if idx < len(images):
-                # add label
-                images_html += f"<td style='text-align: center;'>{labels[idx]} <br>{_image_html(images[idx], domain=domain, width=width, fmt=fmt)}</td>"
+                image_html = _image_html(
+                    images[idx], width=width, domain=domain, fmt=fmt, title=labels[idx]
+                )
+                images_html += f"<td style='text-align: center;'>{image_html}</td>"
         images_html += "</tr>"
     images_html += "</table>"
     return images_html
@@ -317,7 +348,7 @@ def show_images(
     domain: Optional[Tuple[float, float]] = None,
     width: Optional[int] = None,
     fmt: str = "png",
-    n_cols: Optional[int] = None,
+    n_rows: Optional[int] = None,
 ) -> None:
     """Display a list of images with optional labels.
 
@@ -331,13 +362,13 @@ def show_images(
         The domain of the input array, by default None. If None, the domain will be inferred from the array.
     width : Optional[int], optional
         The width of the output image, by default None. If None, the size will be unchanged.
-    n_cols : Optional[int], optional
+    n_rows : Optional[int], optional
         The number of columns in the output table, by default None. If None, the number of columns will be the square root of the number of images.
     """
     string = '<div style="display: flex; flex-direction: row;">'
     labels = labels or list(range(1, len(images) + 1))
     images_html = _create_image_table(
-        images=images, labels=labels, domain=domain, width=width, fmt=fmt, n_cols=n_cols
+        images=images, labels=labels, domain=domain, width=width, fmt=fmt, n_rows=n_rows
     )
     string += f"""<div style="margin-right:10px; margin-top: 4px;">
                         {images_html}
@@ -350,6 +381,9 @@ def animate_sequence(
     sequence: Union[A, List[A]],
     domain: Optional[Tuple[float, float]] = None,
     fmt: str = "png",
+    time_in_seconds: Optional[int] = None,
+    frames_per_second: int = 5,
+    title: Optional[str] = "",
 ) -> None:
     """Animate a sequence of images.
 
@@ -361,12 +395,19 @@ def animate_sequence(
         The domain of the input array, by default None. If None, the domain will be inferred from the array.
     fmt : str, optional
         The image format, by default 'png'
+    time_in_seconds : Optional[int], optional
+        The time in seconds to display the animation, by default None. If None, the time will be calculated from the number of frames and the frames per second.
+    frames_per_second : int, optional
+        The frames per second of the animation, by default 5.
     """
     if isinstance(sequence, list):
         sequence = np.array(sequence)
 
     steps, height, width, _ = sequence.shape
     sequence = np.concatenate(sequence, 1)
+    if time_in_seconds is None:
+        time_in_seconds = steps / frames_per_second
+
     code = Template(
         """
     <style> 
@@ -374,12 +415,15 @@ def animate_sequence(
             width: ${width}px;
             height: ${height}px;
             background: url('$image_url') left center;
-            animation: play 1s steps($steps) infinite alternate;
+            animation: play ${time_in_seconds}s steps($steps) infinite alternate;
         }
         @keyframes play {
             100% { background-position: -${sequence_width}px; }
         }
-    </style><div id='animation'></div>
+    </style>
+    <h4>${title}</h4>
+    <div id='animation'>
+    </div>
     """
     ).substitute(
         image_url=_image_url(sequence, domain=domain, fmt=fmt),
@@ -387,5 +431,7 @@ def animate_sequence(
         width=width,
         height=height,
         steps=steps,
+        time_in_seconds=time_in_seconds,
+        title=title,
     )
     _display_html(code)
