@@ -1,12 +1,13 @@
+import numpy as np
 from feat_viz.image import (
     apply_transformations,
     get_image,
 )
+from feat_viz.io import show_image
 from feat_viz.utils import (
     create_simple_logger,
     ImagePlotter,
     is_jupyter_notebook,
-    show_tensor_image,
 )
 from feat_viz.objective import create_objective, Objective, T, M
 
@@ -14,7 +15,7 @@ import torch
 import torch.optim as optim
 
 from tqdm.auto import tqdm
-from typing import Iterable, Optional, List, Union, Tuple
+from typing import Any, Iterable, Optional, List, Union, Tuple
 import logging
 
 logger = create_simple_logger(__name__)
@@ -38,6 +39,7 @@ class FeatureViz:
         model: M,
         objective: Union[Objective, str],
         logger: Optional[logging.Logger] = None,
+        wandb_logger: Optional[Any] = None,
     ) -> None:
         self.logger = logger or create_simple_logger(__name__)
 
@@ -53,6 +55,7 @@ class FeatureViz:
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.logger.info(f"Using device: {self.device}")
         self.model.to(self.device)
+        self.wandb_logger = wandb_logger
 
     def normalize_grad(self, tensor: T) -> None:
         tensor.grad.data.copy_(tensor.grad / torch.norm(tensor))
@@ -135,8 +138,7 @@ class FeatureViz:
                 self.model(transformed_image)
             except RuntimeError as ex:
                 if i == 0:
-                    # Only display the warning message
-                    # on the first iteration, no need to do that every iteration
+                    # Only display the warning message on the first iteration, no need to do that every iteration
                     self.logger.warning(
                         f"Some layers could not be computed because the size of the image is not big enough. It is fine, as long as the non computed layers are not used in the objective function.\nException: {ex}"
                     )
@@ -155,18 +157,31 @@ class FeatureViz:
                 else:
                     self.logger.debug(f"Loss: {loss.item()}")
 
-                image_to_log = image.clone().detach().cpu()
+                image_to_log = (
+                    image[0].clone().detach().cpu().numpy()
+                )  # show only the first image in the batch
+                image_to_log = np.transpose(image_to_log, (1, 2, 0))
                 if is_jupyter_notebook() and plot_images:
                     image_plotter.update_image(
                         image_to_log,
                         title=f"It: {i} | Loss: {loss.item():.2f}",
                     )
+                if self.wandb_logger:
+                    self.wandb_logger.log(
+                        {
+                            "loss": loss.item(),
+                            "image": self.wandb_logger.Image(image_to_log),
+                        }
+                    )
             if i in thresholds:
-                images.append(image.clone().detach().cpu())
+                img = image.squeeze(0).detach().cpu().numpy()
+                img = np.transpose(img, (1, 2, 0))
+                images.append(img)
+
         image.detach_()
         if show_last_image:
             if is_jupyter_notebook():
-                show_tensor_image(images[-1])
+                show_image(images[-1])
             else:
                 logger.warning(
                     "The last image can only be displayed in a Jupyter Notebook."
