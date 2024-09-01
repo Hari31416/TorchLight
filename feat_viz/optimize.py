@@ -81,7 +81,7 @@ class FeatureViz:
         self.objective(self.model)
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.logger.info(f"Using device: {self.device}")
+        self.logger.debug(f"Using device: {self.device}")
         self.model.to(self.device)
         self.wandb_logger = wandb_logger
 
@@ -180,7 +180,7 @@ class FeatureViz:
 
             # Clip values to keep them in a valid range
             with torch.no_grad():
-                image.clamp_(-1, 1)
+                image.clamp_(0, 1)  # image from `get_image` has domain [0, 1]
 
             if i % freq == 0:
                 if log_loss:

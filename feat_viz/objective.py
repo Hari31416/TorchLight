@@ -187,7 +187,7 @@ class Hook:
         ] = None,
         loss_function: Callable[[T], T] = mean_loss,
         extractor_function: Optional[Callable[[T], T]] = None,
-        extractor_function_kwargs: Optional[dict] = None,
+        extractor_function_kwargs: Optional[dict] = {},
     ):
         self.layer_name = layer_name
         self.channel_number = channel_number
