@@ -28,15 +28,15 @@ def remove_all_hooks(model: torch.nn.Module) -> None:
         if child is not None:
             if hasattr(child, "_forward_hooks"):
                 if child._forward_hooks != OrderedDict():
-                    logger.info(f"Removing forward hooks from {name}")
+                    logger.debug(f"Removing forward hooks from {name}")
                     child._forward_hooks = OrderedDict()
             elif hasattr(child, "_forward_pre_hooks"):
                 if child._forward_pre_hooks != OrderedDict():
-                    logger.info(f"Removing forward pre hooks from {name}")
+                    logger.debug(f"Removing forward pre hooks from {name}")
                     child._forward_pre_hooks = OrderedDict()
             elif hasattr(child, "_backward_hooks"):
                 if child._backward_hooks != OrderedDict():
-                    logger.info(f"Removing backward hooks from {name}")
+                    logger.debug(f"Removing backward hooks from {name}")
                     child._backward_hooks = OrderedDict()
             remove_all_hooks(child)
 
@@ -50,8 +50,8 @@ class FeatureViz:
         The neural network model to visualize.
     objective : Union[Objective, str]
         The objective function to optimize. If a string is passed, it will be used to create the objective function. The string must be in format "layer_name:channel_number". For example, "layer4:0" will optimize the first feature of the fourth layer. Have a look at the `feat_viz.objective.Hook` class for more information regarding `layer_name` and `channel_number`.
-    logger : Optional[logging.Logger], optional
-        The logger object to use, by default None. If None, a simple logger will be created.
+    log_level : str, optional
+        The logging level, by default "warning".
     wandb_logger : Optional[Any], optional
         The Weights & Biases logger object, by default None. If None, no logging will be done.
     remove_existing_hooks : bool, optional
@@ -62,11 +62,11 @@ class FeatureViz:
         self,
         model: M,
         objective: Union[Objective, str],
-        logger: Optional[logging.Logger] = None,
+        log_level: str = "warning",
         wandb_logger: Optional[Any] = None,
         remove_existing_hooks: bool = True,
     ) -> None:
-        self.logger = logger or create_simple_logger(__name__)
+        self.logger = create_simple_logger(self.__class__.__name__, log_level)
 
         self.model = model.eval()
         if remove_existing_hooks:
