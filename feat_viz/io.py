@@ -9,7 +9,7 @@ import PIL.Image
 from io import BytesIO
 import IPython.display
 from string import Template
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 logger = create_simple_logger(__name__)
 
@@ -250,41 +250,90 @@ def show_image(
     _display_html(_image_html(array, width=width, domain=domain, fmt=fmt))
 
 
-def show_images(
-    arrays: List[A],
+def _create_image_table(
+    images: List[A],
     labels: Optional[List[str]] = None,
     domain: Optional[Tuple[float, float]] = None,
     width: Optional[int] = None,
-) -> None:
-    """Display a list of images with optional labels.
+    fmt: str = "png",
+    n_cols: Optional[int] = None,
+):
+    """Create an HTML table of images.
 
-    Parameters
+     Parameters
     ----------
-    arrays : List[np.ndarray]
-        A list of NumPy arrays representing images.
+    images : List[np.ndarray]
+        A list of NumPy images representing images.
     labels : Optional[List[str]], optional
         A list of strings to label each image, by default None. If None, the index will be shown.
     domain : Tuple[float, float], optional
         The domain of the input array, by default None. If None, the domain will be inferred from the array.
     width : Optional[int], optional
         The width of the output image, by default None. If None, the size will be unchanged.
+    n_cols : Optional[int], optional
+        The number of columns in the output table, by default None. If None, the number of columns will be the square root of the number of images.
+
+    Returns
+    -------
+    str
+        The HTML table of images.
+    """
+    n_cols = n_cols or np.ceil(np.sqrt(len(images))).astype(int)
+    n_rows = len(images) // n_cols
+    if n_rows * n_cols < len(images):
+        n_rows += 1
+    images_html = "<table>"
+    for i in range(n_rows):
+        images_html += "<tr>"
+        for j in range(n_cols):
+            idx = i * n_cols + j
+            if idx < len(images):
+                # add label
+                images_html += f"<td style='text-align: center;'>{labels[idx]} <br>{_image_html(images[idx], domain=domain, width=width, fmt=fmt)}</td>"
+        images_html += "</tr>"
+    images_html += "</table>"
+    return images_html
+
+
+def show_images(
+    images: List[A],
+    labels: Optional[List[str]] = None,
+    domain: Optional[Tuple[float, float]] = None,
+    width: Optional[int] = None,
+    fmt: str = "png",
+    n_cols: Optional[int] = None,
+) -> None:
+    """Display a list of images with optional labels.
+
+    Parameters
+    ----------
+    images : List[np.ndarray]
+        A list of NumPy images representing images.
+    labels : Optional[List[str]], optional
+        A list of strings to label each image, by default None. If None, the index will be shown.
+    domain : Tuple[float, float], optional
+        The domain of the input array, by default None. If None, the domain will be inferred from the array.
+    width : Optional[int], optional
+        The width of the output image, by default None. If None, the size will be unchanged.
+    n_cols : Optional[int], optional
+        The number of columns in the output table, by default None. If None, the number of columns will be the square root of the number of images.
     """
     string = '<div style="display: flex; flex-direction: row;">'
-    for i, array in enumerate(arrays):
-        label = labels[i] if labels is not None else i
-        img_html = _image_html(array, width=width, domain=domain)
-        string += """<div style="margin-right:10px; margin-top: 4px;">
-                            {label} <br/>
-                            {img_html}
-                        </div>""".format(
-            label=label, img_html=img_html
-        )
+    labels = labels or list(range(1, len(images) + 1))
+    images_html = _create_image_table(
+        images=images, labels=labels, domain=domain, width=width, fmt=fmt, n_cols=n_cols
+    )
+    string += f"""<div style="margin-right:10px; margin-top: 4px;">
+                        {images_html}
+                    </div>"""
     string += "</div>"
     _display_html(string)
 
 
 def animate_sequence(
-    sequence: T, domain: Optional[Tuple[float, float]] = None, fmt: str = "png"
+    sequence: Union[A, List[A]],
+    domain: Optional[Tuple[float, float]] = None,
+    fmt: str = "png",
 ) -> None:
     """Animate a sequence of images.
 
@@ -297,6 +346,9 @@ def animate_sequence(
     fmt : str, optional
         The image format, by default 'png'
     """
+    if isinstance(sequence, list):
+        sequence = np.array(sequence)
+
     steps, height, width, _ = sequence.shape
     sequence = np.concatenate(sequence, 1)
     code = Template(
