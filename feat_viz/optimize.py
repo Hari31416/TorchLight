@@ -67,6 +67,7 @@ class FeatureViz:
         lr: float = 0.05,
         freq: int = 20,
         use_decorrelated: bool = False,
+        fft: bool = True,
         image_shape: Union[Tuple[int, int], Tuple[int, int, int], int] = (224, 224),
         plot_images: bool = False,
         show_last_image: bool = False,
@@ -87,6 +88,8 @@ class FeatureViz:
             The frequency of logging the loss and saving the image, by default 20.
         use_decorrelated : bool, optional
             Whether to use the decorrelated color space, by default False.
+        fft : bool, optional
+            Whether to use the Fast Fourier Transform (FFT) to create the image, by default True.
         image_shape : Union[Tuple[int, int], Tuple[int, int, int], int], optional
             The shape of the image to optimize, by default (224, 224). If an integer is passed, the image will have the same width and height.
         plot_images : bool, optional
@@ -120,7 +123,7 @@ class FeatureViz:
                 batch=batch,
                 sd=0.5,
                 decorrelate=use_decorrelated,
-                fft=True,
+                fft=fft,
                 alpha=channels == 4,
                 sigmoid=True,
                 scaling_method="min_max",
