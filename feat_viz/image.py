@@ -186,8 +186,20 @@ def random_rotate(image, max_angle=15):
     return F.rotate(image, angle)
 
 
-def apply_transformations(image):
+def pad_image(image, padding=16):
+    return F.pad(image, padding)
+
+
+def crop_image(image, x, y, w, h):
+    return F.crop(image, x, y, h, w)
+
+
+def apply_transformations(image: T) -> T:
+    og_w, og_h = image.shape[-2:]
+    image = pad_image(image, padding=16)
     image = random_jitter(image)
-    image = random_scale(image)
-    image = random_rotate(image)
+    image = random_scale(image, min_scale=0.95, max_scale=1.05)
+    image = random_rotate(image, max_angle=5)
+    image = random_jitter(image)
+    image = crop_image(image, 16, 16, og_w, og_h)
     return image
