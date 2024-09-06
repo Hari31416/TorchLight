@@ -283,7 +283,7 @@ def show_image(
             domain=domain,
             width=width,
             fmt=fmt,
-            n_cols=len(images),
+            n_rows=1,
         )
 
 
