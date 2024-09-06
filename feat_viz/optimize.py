@@ -214,7 +214,6 @@ class FeatureViz:
                     img = np.transpose(img, (0, 2, 3, 1))
                 images.append(img)
 
-        image.detach_()
         if show_last_image:
             if is_jupyter_notebook():
                 show_image(images[-1])
