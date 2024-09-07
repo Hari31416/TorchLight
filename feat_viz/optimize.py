@@ -56,6 +56,10 @@ class FeatureViz:
         The Weights & Biases logger object, by default None. If None, no logging will be done.
     remove_existing_hooks : bool, optional
         Whether to remove existing hooks from the model, by default True. If True, all hooks will be removed before adding new ones.
+    normalize_gradients : bool, optional
+        Whether to normalize the gradients of the image, by default True. If True, the gradients will be normalized to have a norm of 1.
+    clamp_image_range : Tuple[float, float], optional
+        The range to clamp the image values, by default (-1, 1). The image values will be clamped to this range after each optimization step. If None, no clamping will be done.
     """
 
     def __init__(
@@ -65,6 +69,8 @@ class FeatureViz:
         log_level: str = "warning",
         wandb_logger: Optional[Any] = None,
         remove_existing_hooks: bool = True,
+        normalize_gradients: bool = True,
+        clamp_image_range: Tuple[float, float] = (-1, 1),
     ) -> None:
         self.logger = create_simple_logger(self.__class__.__name__, log_level)
 
@@ -84,6 +90,8 @@ class FeatureViz:
         self.logger.debug(f"Using device: {self.device}")
         self.model.to(self.device)
         self.wandb_logger = wandb_logger
+        self.normalize_gradients = normalize_gradients
+        self.clamp_image_range = clamp_image_range
 
     def normalize_grad(self, tensor: T) -> None:
         tensor.grad.data.copy_(tensor.grad / torch.norm(tensor))
@@ -175,12 +183,14 @@ class FeatureViz:
                     )
             loss = self.objective(self.model)
             loss.backward()
-            self.normalize_grad(image)
+
+            if self.normalize_gradients:
+                self.normalize_grad(image)
             optimizer.step()
 
-            # Clip values to keep them in a valid range
-            with torch.no_grad():
-                image.clamp_(0, 1)  # image from `get_image` has domain [0, 1]
+            if self.clamp_image_range is not None:
+                with torch.no_grad():
+                    image.data.clamp_(*self.clamp_image_range)
 
             if i % freq == 0:
                 if log_loss:
