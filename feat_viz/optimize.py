@@ -170,7 +170,7 @@ class FeatureViz:
                 decorrelate=use_decorrelated,
                 fft=fft,
                 alpha=channels == 4,
-                sigmoid=True,
+                sigmoid=False,
                 scaling_method="min_max",
                 device=self.device,
             )
@@ -185,16 +185,20 @@ class FeatureViz:
         num_iterations = max(thresholds) + 1
         for i in tqdm(range(num_iterations), disable=not show_progress):
 
-            if extra_transformations is None:
-                extra_transformations = []
+            extra_transformations_ = []
+            if extra_transformations is not None:
+                # copy the list to avoid modifying the original list
+                extra_transformations_ = extra_transformations.copy()
+
             if preprocess:
                 if self.model._get_name() == "InceptionV1":
-                    extra_transformations.append(preprocess_inceptionv1())
+                    extra_transformations_.append(preprocess_inceptionv1())
                 else:
-                    extra_transformations.append(normalize())
+                    extra_transformations_.append(normalize())
 
             transformed_image = apply_transformations(
-                image_f(), extra_transformations=extra_transformations
+                image_f(),
+                extra_transformations=extra_transformations_,
             ).to(self.device)
 
             optimizer.zero_grad()
