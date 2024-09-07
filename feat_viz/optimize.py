@@ -2,6 +2,8 @@ import numpy as np
 from feat_viz.image import (
     apply_transformations,
     get_image,
+    normalize,
+    preprocess_inceptionv1,
 )
 from feat_viz.io import show_image
 from feat_viz.utils import (
@@ -15,7 +17,7 @@ import torch
 import torch.optim as optim
 
 from tqdm.auto import tqdm
-from typing import Any, Iterable, Optional, List, Union, Tuple
+from typing import Any, Iterable, Optional, List, Union, Tuple, Callable
 import logging
 from collections import OrderedDict
 
@@ -57,9 +59,9 @@ class FeatureViz:
     remove_existing_hooks : bool, optional
         Whether to remove existing hooks from the model, by default True. If True, all hooks will be removed before adding new ones.
     normalize_gradients : bool, optional
-        Whether to normalize the gradients of the image, by default True. If True, the gradients will be normalized to have a norm of 1.
-    clamp_image_range : Tuple[float, float], optional
-        The range to clamp the image values, by default (-1, 1). The image values will be clamped to this range after each optimization step. If None, no clamping will be done.
+        Whether to normalize the gradients of the image, by default False. If True, the gradients will be normalized to have a norm of 1.
+    clamp_param_value : Tuple[float, float], optional
+        The range to clamp the image values, by default None. The image values will be clamped to this range after each optimization step. If None, no clamping will be done.
     """
 
     def __init__(
@@ -69,8 +71,8 @@ class FeatureViz:
         log_level: str = "warning",
         wandb_logger: Optional[Any] = None,
         remove_existing_hooks: bool = True,
-        normalize_gradients: bool = True,
-        clamp_image_range: Tuple[float, float] = (-1, 1),
+        normalize_gradients: bool = False,
+        clamp_param_value: Tuple[float, float] = None,
     ) -> None:
         self.logger = create_simple_logger(self.__class__.__name__, log_level)
 
@@ -91,14 +93,15 @@ class FeatureViz:
         self.model.to(self.device)
         self.wandb_logger = wandb_logger
         self.normalize_gradients = normalize_gradients
-        self.clamp_image_range = clamp_image_range
+        self.clamp_param_value = clamp_param_value
 
-    def normalize_grad(self, tensor: T) -> None:
-        tensor.grad.data.copy_(tensor.grad / torch.norm(tensor))
+    def normalize_grad(self, tensor: List[T]) -> None:
+        for t in tensor:
+            t.grad.data.copy_(t.grad / torch.norm(t))
 
     def visualize(
         self,
-        image: Optional[T] = None,
+        param_f: Optional[Callable[[], Tuple[List[T], Callable[[], T]]]] = None,
         thresholds: Optional[Iterable[int]] = (128,),
         lr: float = 0.05,
         freq: int = 20,
@@ -109,13 +112,15 @@ class FeatureViz:
         show_last_image: bool = False,
         show_progress: bool = True,
         log_loss: bool = False,
+        extra_transformations: Optional[List[Callable[[T], T]]] = None,
+        preprocess: bool = True,
     ) -> List[T]:
         """Main method to visualize the features of the neural network.
 
         Parameters
         ----------
-        image : Optional[T], optional
-            The initial image to optimize, by default None. If None, a random image will be created using `torch.randn` and the `image_shape` parameter.
+        param_f : Optional[Callable[[], Tuple[List[T], Callable[[], T]]]], optional
+            The function to create the image. If None, a random image will be created, by default None. The function must return two values: the parameters that are to be optimzed and a function that creates the image.
         thresholds : Optional[Iterable[int]], optional
             The iterations on which to return the image, by default [128].
         lr : float, optional
@@ -136,6 +141,10 @@ class FeatureViz:
             Whether to show the progress bar, by default True.
         log_loss : bool, optional
             Whether to log the loss, by default False. If True, the loss will be logged at each iteration divisible by `freq`.
+        extra_transformations : Optional[List[Callable[[T], T]], optional
+            A list of extra transformations to apply to the image, by default None.
+        preprocess : bool, optional
+            Whether to apply the default preprocessing to the image, by default True. If True, the default preprocessing will be applied to the image before passing it to the neural network.
 
         Returns
         -------
@@ -145,7 +154,7 @@ class FeatureViz:
         if plot_images:
             image_plotter = ImagePlotter()
         images = []
-        if image is None:
+        if param_f is None:
             if isinstance(image_shape, int):
                 image_shape = (1, 3, image_shape, image_shape)
             elif len(image_shape) == 2:
@@ -153,7 +162,7 @@ class FeatureViz:
             elif len(image_shape) == 3:
                 image_shape = (1, *image_shape)
             batch, channels, height, width = image_shape
-            image = get_image(
+            params, image_f = get_image(
                 w=width,
                 h=height,
                 batch=batch,
@@ -163,15 +172,31 @@ class FeatureViz:
                 alpha=channels == 4,
                 sigmoid=True,
                 scaling_method="min_max",
+                device=self.device,
             )
+        else:
+            params, image_f = param_f()
 
-        image = image.to(self.device)
-        image.requires_grad_(True)
+        for p in params:
+            p.requires_grad_(True)
+            p.to(self.device)
 
-        optimizer = optim.Adam([image], lr=lr)
+        optimizer = optim.Adam(params, lr=lr)
         num_iterations = max(thresholds) + 1
         for i in tqdm(range(num_iterations), disable=not show_progress):
-            transformed_image = apply_transformations(image).to(self.device)
+
+            if extra_transformations is None:
+                extra_transformations = []
+            if preprocess:
+                if self.model._get_name() == "InceptionV1":
+                    extra_transformations.append(preprocess_inceptionv1)
+                else:
+                    extra_transformations.append(normalize)
+
+            transformed_image = apply_transformations(
+                image_f(), extra_transformations=extra_transformations
+            ).to(self.device)
+
             optimizer.zero_grad()
             try:
                 self.model(transformed_image)
@@ -185,12 +210,13 @@ class FeatureViz:
             loss.backward()
 
             if self.normalize_gradients:
-                self.normalize_grad(image)
+                self.normalize_grad(params)
             optimizer.step()
 
-            if self.clamp_image_range is not None:
+            if self.clamp_param_value is not None:
                 with torch.no_grad():
-                    image.data.clamp_(*self.clamp_image_range)
+                    for p in params:
+                        p.data.clamp_(*self.clamp_param_value)
 
             if i % freq == 0:
                 if log_loss:
@@ -199,7 +225,7 @@ class FeatureViz:
                     self.logger.debug(f"Loss: {loss.item()}")
 
                 image_to_log = (
-                    image[0].clone().detach().cpu().numpy()
+                    image_f()[0].clone().detach().cpu().numpy()
                 )  # show only the first image in the batch
                 image_to_log = np.transpose(image_to_log, (1, 2, 0))
                 if is_jupyter_notebook() and plot_images:
@@ -215,7 +241,7 @@ class FeatureViz:
                         }
                     )
             if i in thresholds:
-                img = image.squeeze(0).detach().cpu().numpy()
+                img = image_f().squeeze(0).detach().cpu().numpy()
                 rank = len(img.shape)
                 if rank == 3:
                     img = np.transpose(img, (1, 2, 0))
