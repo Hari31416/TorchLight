@@ -41,7 +41,7 @@ def pixel_image(
         Tuple containing the image tensor and a function to generate the image
     """
 
-    sd = sd or 0.5
+    sd = sd or 0.01
     init_val = np.random.normal(size=shape, scale=sd).astype(np.float32)
     # convert to pytorch tensor
     image = torch.tensor(init_val, device=device)
@@ -64,7 +64,7 @@ def rfft2d_freqs(h, w):
 
 
 def fft_image(shape, sd=None, decay_power=1, device=DEFAULT_DEVICE):
-    sd = sd or 0.05
+    """Gets the image in the frequency domain."""
     batch, channels, h, w = shape
     freqs = rfft2d_freqs(h, w)
     init_val_size = (
@@ -147,7 +147,7 @@ def get_image(
     w: int,
     h: Optional[int] = None,
     batch: Optional[int] = 1,
-    sd: Optional[float] = 0.5,
+    sd: Optional[float] = 0.01,
     decorrelate: bool = True,
     fft: bool = True,
     alpha=False,
