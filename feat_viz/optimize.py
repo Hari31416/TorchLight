@@ -189,9 +189,9 @@ class FeatureViz:
                 extra_transformations = []
             if preprocess:
                 if self.model._get_name() == "InceptionV1":
-                    extra_transformations.append(preprocess_inceptionv1)
+                    extra_transformations.append(preprocess_inceptionv1())
                 else:
-                    extra_transformations.append(normalize)
+                    extra_transformations.append(normalize())
 
             transformed_image = apply_transformations(
                 image_f(), extra_transformations=extra_transformations
