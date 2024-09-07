@@ -103,6 +103,8 @@ def fft_image(shape, sd=None, decay_power=1, device=DEFAULT_DEVICE):
 
 def linear_decorelate_color(t: T) -> T:
     """Multiply input by sqrt of empirical (ImageNet) color correlation matrix."""
+    og_device = t.device
+    t = t.to("cpu")
     color_correlation_svd_sqrt = np.array(
         [[0.26, 0.09, 0.02], [0.27, 0.00, -0.05], [0.27, -0.09, 0.03]]
     ).astype("float32")
@@ -114,7 +116,7 @@ def linear_decorelate_color(t: T) -> T:
     color_correlation_normalized = torch.tensor(color_correlation_normalized)
     t_flat = torch.matmul(t_flat, color_correlation_normalized.T)
     t = torch.reshape(t_flat, t.shape)
-    return t
+    return t.to(og_device)
 
 
 def convert_to_valid_rgb(
