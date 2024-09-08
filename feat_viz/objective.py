@@ -1,4 +1,4 @@
-from feat_viz.utils import create_simple_logger, M, T
+from feat_viz.utils import create_simple_logger, M, T, A
 
 import torch
 from typing import List, Tuple, Union, Optional, Callable
@@ -118,6 +118,87 @@ def alignment_loss(layer_output: T, decay_ratio: int = 2) -> T:
             arr_a, arr_b = layer_output[a], layer_output[b]
             accum += ((arr_a - arr_b) ** 2).mean() / decay_ratio ** float(d)
     return accum
+
+
+def neuron_direction_in_layer(layer_output: T, direction: Union[A, T]) -> T:
+    if isinstance(direction, A):
+        direction = torch.tensor(
+            direction, dtype=layer_output.dtype, device=layer_output.device
+        )
+    else:
+        direction = direction.to(layer_output.device)
+
+    layer_mean = layer_output.mean(
+        dim=(-1, -2)
+    )  # last two dimensions are height and width
+    # reshape to make b*c*1*1
+    layer_mean = layer_mean.view(layer_mean.shape[0], layer_mean.shape[1], 1, 1)
+    direction = direction.view(1, -1, 1, 1)
+    if layer_mean.shape[1] != direction.shape[1]:
+        msg = f"Direction shape {direction.shape} does not match layer output shape {layer_mean.shape}"
+        logger.error(msg)
+        raise ValueError(msg)
+
+    out = torch.nn.functional.cosine_similarity(layer_mean, direction, dim=1)
+    logger.debug(
+        f"Layer mean shape: {layer_mean.shape}, Direction shape: {direction.shape}, Cosine similarity shape: {out.shape}"
+    )
+    return -torch.mean(out)
+
+
+def neuron_direction_in_layer_at_pos(
+    layer_output: T, x: int, y: int, direction: Union[A, T]
+) -> T:
+    if isinstance(direction, A):
+        direction = torch.tensor(
+            direction, dtype=layer_output.dtype, device=layer_output.device
+        )
+    else:
+        direction = direction.to(layer_output.device)
+
+    neuron_output = get_matrix_element_at_position(layer_output, x, y)
+    neuron_output = neuron_output.view(
+        neuron_output.shape[0], neuron_output.shape[1], 1, 1
+    )
+    direction = direction.view(1, -1, 1, 1)
+    if neuron_output.shape[1] != direction.shape[1]:
+        msg = f"Direction shape {direction.shape} does not match layer output shape {neuron_output.shape}"
+        logger.error(msg)
+        raise ValueError(msg)
+
+    out = torch.nn.functional.cosine_similarity(neuron_output, direction, dim=1)
+    logger.debug(
+        f"Neuron output shape: {neuron_output.shape}, Direction shape: {direction.shape}, Cosine similarity shape: {out.shape}"
+    )
+    return -torch.mean(out)
+
+
+def neuron_direction_in_channel(
+    layer_output: T, channel: int, direction: Union[A, T]
+) -> T:
+    if isinstance(direction, A):
+        direction = torch.tensor(
+            direction, dtype=layer_output.dtype, device=layer_output.device
+        )
+    else:
+        direction = direction.to(layer_output.device)
+
+    channel_output = layer_output[:, channel, :, :]
+    # flatten the last two dimensions
+    channel_output = channel_output.view(channel_output.shape[0], 1, -1)
+
+    direction = direction.view(1, 1, -1)
+
+    if channel_output.shape[-1] != direction.shape[-1]:
+        msg = f"Direction shape {direction.shape} does not match layer output shape {channel_output.shape}"
+        logger.error(msg)
+        raise ValueError(msg)
+
+    out = torch.nn.functional.cosine_similarity(channel_output, direction, dim=1)
+    logger.debug(
+        f"Channel output shape: {channel_output.shape}, Direction shape: {direction.shape}, Cosine similarity shape: {out.shape}"
+    )
+    return -torch.mean(out)
 
 
 class Hook:
