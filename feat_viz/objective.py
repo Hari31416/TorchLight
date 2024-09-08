@@ -318,7 +318,8 @@ class Hook:
                 self.feature = self.extractor_function(
                     output, **self.extractor_function_kwargs
                 )
-                self.loss = self.loss_function(self.feature)
+                # in case a function is used, do not use the loss_function
+                self.loss = self.feature
 
             self.__hook = module.register_forward_hook(hook_fn)
             return
