@@ -77,6 +77,9 @@ class FeatureViz:
         self.logger = create_simple_logger(self.__class__.__name__, log_level)
 
         self.model = model.eval()
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.logger.debug(f"Using device: {self.device}")
+        self.model.to(self.device)
         if remove_existing_hooks:
             remove_all_hooks(self.model)
 
@@ -87,10 +90,6 @@ class FeatureViz:
         # in case the objective was created using the Hook class,
         # we need to pass the model to the objective to register the hooks
         self.objective(self.model)
-
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.logger.debug(f"Using device: {self.device}")
-        self.model.to(self.device)
         self.wandb_logger = wandb_logger
         self.normalize_gradients = normalize_gradients
         self.clamp_param_value = clamp_param_value
