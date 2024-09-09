@@ -1,7 +1,7 @@
 from feat_viz.utils import create_simple_logger, M, T, A
 
 import torch
-from typing import List, Tuple, Union, Optional, Callable
+from typing import Any, Dict, List, Tuple, Union, Optional, Callable
 
 logger = create_simple_logger(__name__)
 
@@ -226,7 +226,7 @@ class Hook:
     loss_function : Callable[[T], T], optional
         The loss function to calculate the loss from the extracted features. The loss function should take a tensor as input and return a scalar value. The default is `mean_loss` which calculates the mean of the tensor.
     extractor_function : Optional[Callable[[T], T]], optional
-        A custom function to extract features from the layer output. The function should take a tensor as input and return a tensor. By default None. The input tensor will be the output of the layer with shape batch_size x channels x height x width. The function must return a tensor that is then passed to the `loss_function` to calculate the loss.
+        A custom function to extract features from the layer output. The function should take a tensor as input and return a tensor. By default None. The input tensor will be the output of the layer with shape batch_size x channels x height x width. The function must return a scalar tensor that is used as the loss.
     extractor_function_kwargs : Optional[dict], optional
         Keyword arguments to pass to the `extractor_function`, by default None.
 
@@ -573,3 +573,16 @@ def create_objective(
     )
     hook = Hook(layer_name, channel_number, neuron_number, loss_function)
     return Objective(hook.__call__, name or layer_channel_string)
+
+
+def create_objective_from_function(
+    extractor_function: Callable[[T], T], layer_name: str, **kwargs: Dict[str, Any]
+) -> Objective:
+    """Creates an objective function using a custom function. The custom function should take a tensor as input and return a tensor. The objective function will be created using the `Hook` class. The `extractor_function` must take a tensor as input and return a scalar tensor as output to be used as loss. The `layer_name` is the name of the layer in the model. The `kwargs` are keyword arguments to pass to the `extractor_function` via `extractor_function_kwargs` parameter. For more details, see the `Hook` class."""
+    hook = Hook(
+        layer_name,
+        extractor_function=extractor_function,
+        extractor_function_kwargs=kwargs,
+    )
+    o = Objective(hook, name=function.__name__)
+    return o
