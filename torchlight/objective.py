@@ -471,6 +471,9 @@ class Objective:
         new_name = f"-{self.name}"
         return Objective(new_hook, new_name)
 
+    def __sub__(self, other: Union["Objective", float]) -> "Objective":
+        return self + (-1 * other)
+
     def __mul__(self, other: Union["Objective", float]) -> "Objective":
         if isinstance(other, (int, float)):
             new_hook = lambda model: self.objective_func(model) * other
@@ -584,5 +587,5 @@ def create_objective_from_function(
         extractor_function=extractor_function,
         extractor_function_kwargs=kwargs,
     )
-    o = Objective(hook, name=function.__name__)
+    o = Objective(hook, name=extractor_function.__name__)
     return o
