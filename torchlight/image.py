@@ -1,10 +1,10 @@
-from feat_viz.utils import create_simple_logger, T, M, A
+from torchlight.utils import T, A
 
 import torch
 import torchvision.transforms as transforms
 from torchvision.transforms import functional as F
 import numpy as np
-from typing import Literal, Tuple, List, Optional, Union, Callable
+from typing import Literal, Tuple, List, Optional, Callable
 
 DEFAULT_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 TORCH_VERSION = torch.__version__
@@ -227,7 +227,7 @@ def crop_image(x, y):
 def normalize():
     # ImageNet normalization for torchvision models
     # see https://pytorch.org/docs/stable/torchvision/models.html
-    normal = Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    normal = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
     def inner(image_t):
         return torch.stack([normal(t) for t in image_t])

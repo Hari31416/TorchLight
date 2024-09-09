@@ -1,4 +1,4 @@
-from feat_viz.utils import create_simple_logger, M, T, A
+from torchlight.utils import create_simple_logger, M, T, A
 
 import torch
 from typing import Any, Dict, List, Tuple, Union, Optional, Callable

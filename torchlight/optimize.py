@@ -1,17 +1,17 @@
 import numpy as np
-from feat_viz.image import (
+from torchlight.image import (
     apply_transformations,
     get_image,
     normalize,
     preprocess_inceptionv1,
 )
-from feat_viz.io import show_image
-from feat_viz.utils import (
+from torchlight.io import show_image
+from torchlight.utils import (
     create_simple_logger,
     ImagePlotter,
     is_jupyter_notebook,
 )
-from feat_viz.objective import create_objective, Objective, T, M
+from torchlight.objective import create_objective, Objective, T, M
 
 import torch
 import torch.optim as optim

@@ -4,8 +4,8 @@ import pandas as pd
 from copy import deepcopy
 import torch
 
-from feat_viz.objective import *
-from feat_viz.utils import load_model
+from torchlight.objective import *
+from torchlight.utils import load_model
 import numpy as np
 
 random_image = torch.randn(1, 3, 244, 244)
