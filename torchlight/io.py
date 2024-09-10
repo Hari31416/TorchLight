@@ -348,7 +348,7 @@ def show_images(
     domain: Optional[Tuple[float, float]] = None,
     width: Optional[int] = None,
     fmt: str = "png",
-    n_rows: Optional[int] = None,
+    n_rows: int = 1,
 ) -> None:
     """Display a list of images with optional labels.
 
@@ -362,8 +362,8 @@ def show_images(
         The domain of the input array, by default None. If None, the domain will be inferred from the array.
     width : Optional[int], optional
         The width of the output image, by default None. If None, the size will be unchanged.
-    n_rows : Optional[int], optional
-        The number of columns in the output table, by default None. If None, the number of columns will be the square root of the number of images.
+    n_rows : int, optional
+        The number of columns in the output table, by default 1.
     """
     string = '<div style="display: flex; flex-direction: row;">'
     labels = labels or list(range(1, len(images) + 1))
