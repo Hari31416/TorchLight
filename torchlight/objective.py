@@ -229,6 +229,8 @@ class Hook:
         A custom function to extract features from the layer output. The function should take a tensor as input and return a tensor. By default None. The input tensor will be the output of the layer with shape batch_size x channels x height x width. The function must return a scalar tensor that is used as the loss.
     extractor_function_kwargs : Optional[dict], optional
         Keyword arguments to pass to the `extractor_function`, by default None.
+    batch : Optional[int], optional
+        The batch number to extract from the output. By default None which means the first batch is used. In case of None and an `extractor_function` is used, the function must handle the batch dimension itself, the input to the function will be the output of the layer with shape `batch x channels x height x width`. Even if the batch is provided, the output will still be `1 x channels x height x width` and not `channels x height x width`.
 
     Methods
     -------
@@ -269,6 +271,7 @@ class Hook:
         loss_function: Callable[[T], T] = mean_loss,
         extractor_function: Optional[Callable[[T], T]] = None,
         extractor_function_kwargs: Optional[dict] = {},
+        batch: Optional[int] = None,
     ):
         self.layer_name = layer_name
         self.channel_number = channel_number
@@ -279,6 +282,7 @@ class Hook:
         self.feature: T = None
         self.loss: T = 0
         self.__hook = None
+        self.batch = batch
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(layer_name={self.layer_name}, channel_number={self.channel_number}, neuron_number={self.neuron_number})"
@@ -315,6 +319,12 @@ class Hook:
             )
 
             def hook_fn(module: M, input: T, output: T) -> None:
+                if self.batch is not None:
+                    logger.info(f"Extracting batch {self.batch} from output")
+                    output = output[
+                        self.batch : self.batch + 1
+                    ]  # take the batch from the output
+
                 self.feature = self.extractor_function(
                     output, **self.extractor_function_kwargs
                 )
@@ -364,7 +374,11 @@ class Hook:
         def hook_fn(module: M, input: T, output: T) -> None:
             # shape will be batch_size x channels x height x width
             # take the first element from batch_size
-            output = output[0]  # shape will be channels x height x width
+            if self.batch is not None:
+                logger.info(f"Extracting batch {self.batch} from output")
+                output = output[self.batch]  # shape will be channels x height x width
+            else:
+                output = output[0]  # shape will be channels x height x width
 
             # if no channel number specified, use the whole output
             if self.channel_number is None:
@@ -452,6 +466,8 @@ class Objective:
 
     def __call__(self, model: M):
         """Call the objective function on the model to calculate the loss. Accepts a model and returns the loss value."""
+        # model is only required if hook is to be added
+        # if hook is already added, model is not required and will not be used
         return self.objective_func(model)
 
     def __add__(self, other: Union["Objective", float]) -> "Objective":
@@ -559,6 +575,7 @@ def create_objective(
     layer_channel_string: str,
     loss_function: Callable[[T], T] = mean_loss,
     name: Optional[str] = None,
+    batch: Optional[int] = None,
 ) -> Objective:
     """Creates an objective function using the layer name, channel number and neuron number string (last two are optional). The layer name and channel number string should be in the format `layer_name:channel_number:neuron_number` where `channel_number` can be a single channel number, a list of channel numbers, or a tuple of channel numbers. The `neuron_number` is optional and can be used to extract a single neuron from the channel output. To better understand how the neuron number is extracted, see the `get_nth_matrix_element` function. The loss function should be a function that takes a tensor as input and returns a scalar value. The objective function will be created using the `Hook` class.
 
@@ -570,22 +587,28 @@ def create_objective(
         The loss function to calculate the loss from the extracted features. By default, it is `mean_loss` which calculates the mean of the tensor.
     name : Optional[str], optional
         The name of the objective function, by default None
+    batch : Optional[int], optional
+        The batch number to extract from the output. By default None which means the first batch is used. See the `Hook` class for more details.
     """
     layer_name, channel_number, neuron_number = _parse_layer_channel_neuron_string(
         layer_channel_string
     )
-    hook = Hook(layer_name, channel_number, neuron_number, loss_function)
+    hook = Hook(layer_name, channel_number, neuron_number, loss_function, batch=batch)
     return Objective(hook.__call__, name or layer_channel_string)
 
 
 def create_objective_from_function(
-    extractor_function: Callable[[T], T], layer_name: str, **kwargs: Dict[str, Any]
+    extractor_function: Callable[[T], T],
+    layer_name: str,
+    batch: Optional[int],
+    **kwargs: Dict[str, Any],
 ) -> Objective:
-    """Creates an objective function using a custom function. The custom function should take a tensor as input and return a tensor. The objective function will be created using the `Hook` class. The `extractor_function` must take a tensor as input and return a scalar tensor as output to be used as loss. The `layer_name` is the name of the layer in the model. The `kwargs` are keyword arguments to pass to the `extractor_function` via `extractor_function_kwargs` parameter. For more details, see the `Hook` class."""
+    """Creates an objective function using a custom function. The custom function should take a tensor as input and return a tensor. The objective function will be created using the `Hook` class. The `extractor_function` must take a tensor as input and return a scalar tensor as output to be used as loss. The `layer_name` is the name of the layer in the model. The `kwargs` are keyword arguments to pass to the `extractor_function` via `extractor_function_kwargs` parameter. For more details, see the `Hook` class. The `batch` parameter is the batch number to extract from the output. If None, the first batch is used. Look at the `Hook` class for more details."""
     hook = Hook(
         layer_name,
         extractor_function=extractor_function,
         extractor_function_kwargs=kwargs,
+        batch=batch,
     )
     o = Objective(hook, name=extractor_function.__name__)
     return o
