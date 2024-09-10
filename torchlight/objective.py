@@ -442,6 +442,8 @@ class Objective:
         The objective function. If a Hook is provided, the __call__ method of the Hook will be used. If a Callable is provided, the Callable will be used as the objective function. Note that if using a Hook, you will need to call the hook first on the model before passing it to the Objective to register the forward hook. If not, the loss for the first time will be zero since at that time the hook has not been called yet. From the second time onwards, the loss will be calculated correctly.
     name : Optional[str], optional
         The name of the objective function, by default None
+    hook_objects : Optional[Union[Hook, List[Hook]], optional
+        The hook objects to add to the objective function. By default None. If two objective functions are combined via arithmetic operations, the hook objects will be combined as well.
 
     """
 
@@ -449,12 +451,19 @@ class Objective:
         self,
         objective_func: Union[Hook, Callable[[M], T]],
         name: Optional[str] = None,
+        hook_objects: Optional[Union[Hook, List[Hook]]] = None,
     ):
         if isinstance(objective_func, Hook):
             # use the hook's __call__ method
             self.objective_func = objective_func.__call__
         else:
             self.objective_func = objective_func
+        if hook_objects is None:
+            self.hook_objects = []
+        elif isinstance(hook_objects, Hook):
+            self.hook_objects = [hook_objects]
+        else:
+            self.hook_objects = hook_objects
 
         self.name = name if name is not None else ""
 
@@ -474,18 +483,19 @@ class Objective:
         if isinstance(other, (int, float)):
             new_hook = lambda model: self.objective_func(model) + other
             new_name = f"{self.name}+{other}"
-            return Objective(new_hook, new_name)
+            return Objective(new_hook, new_name, self.hook_objects)
 
         new_hook = lambda model: self.objective_func(model) + other.objective_func(
             model
         )
         new_name = f"{self.name}+{other.name}"
-        return Objective(new_hook, new_name)
+        hook_objects = self.hook_objects + other.hook_objects
+        return Objective(new_hook, new_name, hook_objects)
 
     def __neg__(self) -> "Objective":
         new_hook = lambda model: -self.objective_func(model)
         new_name = f"-{self.name}"
-        return Objective(new_hook, new_name)
+        return Objective(new_hook, new_name, self.hook_objects)
 
     def __sub__(self, other: Union["Objective", float]) -> "Objective":
         return self + (-1 * other)
@@ -494,25 +504,25 @@ class Objective:
         if isinstance(other, (int, float)):
             new_hook = lambda model: self.objective_func(model) * other
             new_name = f"{self.name}*{other}"
-            return Objective(new_hook, new_name)
+            return Objective(new_hook, new_name, self.hook_objects)
 
         new_hook = lambda model: self.objective_func(model) * other.objective_func(
             model
         )
         new_name = f"{self.name}*{other.name}"
-        return Objective(new_hook, new_name)
+        return Objective(new_hook, new_name, self.hook_objects + other.hook_objects)
 
     def __truediv__(self, other: Union["Objective", float]) -> "Objective":
         if isinstance(other, (int, float)):
             new_hook = lambda model: self.objective_func(model) / other
             new_name = f"{self.name}/{other}"
-            return Objective(new_hook, new_name)
+            return Objective(new_hook, new_name, self.hook_objects)
 
         new_hook = lambda model: self.objective_func(model) / other.objective_func(
             model
         )
         new_name = f"{self.name}/{other.name}"
-        return Objective(new_hook, new_name)
+        return Objective(new_hook, new_name, self.hook_objects + other.hook_objects)
 
     def __rmul__(self, other: Union["Objective", float]) -> "Objective":
         return self.__mul__(other)
@@ -524,7 +534,8 @@ class Objective:
     def sum(objectives: List["Objective"]) -> "Objective":
         new_hook = lambda model: sum([obj.objective_func(model) for obj in objectives])
         new_name = "+".join([obj.name for obj in objectives])
-        return Objective(new_hook, new_name)
+        hook_objects = [hook for obj in objectives for hook in obj.hook_objects]
+        return Objective(new_hook, new_name, hook_objects)
 
 
 def _parse_layer_channel_neuron_string(
@@ -594,13 +605,13 @@ def create_objective(
         layer_channel_string
     )
     hook = Hook(layer_name, channel_number, neuron_number, loss_function, batch=batch)
-    return Objective(hook.__call__, name or layer_channel_string)
+    return Objective(hook.__call__, name or layer_channel_string, hook_objects=hook)
 
 
 def create_objective_from_function(
     extractor_function: Callable[[T], T],
     layer_name: str,
-    batch: Optional[int],
+    batch: Optional[int] = None,
     **kwargs: Dict[str, Any],
 ) -> Objective:
     """Creates an objective function using a custom function. The custom function should take a tensor as input and return a tensor. The objective function will be created using the `Hook` class. The `extractor_function` must take a tensor as input and return a scalar tensor as output to be used as loss. The `layer_name` is the name of the layer in the model. The `kwargs` are keyword arguments to pass to the `extractor_function` via `extractor_function_kwargs` parameter. For more details, see the `Hook` class. The `batch` parameter is the batch number to extract from the output. If None, the first batch is used. Look at the `Hook` class for more details."""
@@ -610,5 +621,5 @@ def create_objective_from_function(
         extractor_function_kwargs=kwargs,
         batch=batch,
     )
-    o = Objective(hook, name=extractor_function.__name__)
+    o = Objective(hook, name=extractor_function.__name__, hook_objects=hook)
     return o
