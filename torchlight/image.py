@@ -1,9 +1,11 @@
 from torchlight.utils import T, A
 
 import torch
+from torch import nn
 import torchvision.transforms as transforms
 from torchvision.transforms import functional as F
 import numpy as np
+from collections import OrderedDict
 from typing import Literal, Tuple, List, Optional, Callable
 
 DEFAULT_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -141,6 +143,73 @@ def convert_to_valid_rgb(
     elif scaling_method == "clamp":
         t = torch.clamp(t, 0.0, 1.0)
     return t
+
+
+# Source for CPPN:
+# https://github.com/greentfrapp/lucent/blob/dev/lucent/optvis/param/cppn.py
+
+
+class CompositeActivation(nn.Module):
+
+    def forward(self, x):
+        x = torch.atan(x)
+        return torch.cat([x / 0.67, (x * x) / 0.6], 1)
+
+
+def cppn(
+    size: int,
+    num_output_channels: int = 3,
+    num_hidden_channels: int = 24,
+    num_layers: int = 8,
+    activation_fn: nn.Module = CompositeActivation,
+    normalize: bool = False,
+    device: str = DEFAULT_DEVICE,
+) -> Tuple[List[nn.Parameter], Callable[[], T]]:
+    """Generates a Convolutional Positional Pixel Network (CPPN) model with the given parameters. The model is initialized with weights from a normal distribution with mean 0 and standard deviation 1/sqrt(in_channels). The function returns the model's parameters and a function that generates an image from the model."""
+
+    r = 3**0.5
+
+    coord_range = torch.linspace(-r, r, size)
+    x = coord_range.view(-1, 1).repeat(1, coord_range.size(0))
+    y = coord_range.view(1, -1).repeat(coord_range.size(0), 1)
+
+    device = torch.device(device)
+
+    input_tensor = torch.stack([x, y], dim=0).unsqueeze(0).to(device)
+
+    layers = []
+    kernel_size = 1
+    for i in range(num_layers):
+        out_c = num_hidden_channels
+        in_c = out_c * 2  # * 2 for composite activation
+        if i == 0:
+            in_c = 2
+        if i == num_layers - 1:
+            out_c = num_output_channels
+        layers.append(("conv{}".format(i), torch.nn.Conv2d(in_c, out_c, kernel_size)))
+        if normalize:
+            layers.append(("norm{}".format(i), torch.nn.InstanceNorm2d(out_c)))
+        if i < num_layers - 1:
+            layers.append(("actv{}".format(i), activation_fn()))
+        else:
+            layers.append(("output", torch.nn.Sigmoid()))
+
+    # Initialize model
+    net = torch.nn.Sequential(OrderedDict(layers)).to(device)
+
+    # Initialize weights
+    def weights_init(module):
+        if isinstance(module, torch.nn.Conv2d):
+            torch.nn.init.normal_(module.weight, 0, np.sqrt(1 / module.in_channels))
+            if module.bias is not None:
+                torch.nn.init.zeros_(module.bias)
+
+    net.apply(weights_init)
+    # Set last conv2d layer's weights to 0
+    torch.nn.init.zeros_(
+        dict(net.named_children())["conv{}".format(num_layers - 1)].weight
+    )
+    return list(net.parameters()), lambda: net(input_tensor)
 
 
 def get_image(
