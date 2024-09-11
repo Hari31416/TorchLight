@@ -100,3 +100,17 @@ show_images(images[-1], [neuron1, neuron2, neuron1+ " and "+ neuron2])
 Here is the final image:
 
 ![mixed4a, 479th channel](./images/interpolate.png)
+
+### Using CPPN Parameterized Image
+
+The module also supports using a CPPN (Compositional Pattern Producing Network) to parameterize the image. Here is an example of how to use a CPPN to parameterize the image.
+
+```python
+from torchlight.image import cppn
+fc = FeatureViz(model=model, objective="mixed4b_3x3_pre_relu_conv:77")
+images = fc.visualize(param_f = lambda : cppn(224), show_last_image=True, show_progress=True, thresholds=thresholds, lr=0.002)
+```
+
+Here is the final image:
+
+![cppn_mixed4b_pool_reduce_pre_relu_conv_16](./images/cppn_mixed4b_pool_reduce_pre_relu_conv_16.png)
