@@ -1,6 +1,8 @@
 from torchlight.utils import create_simple_logger, M, T, A
 
 import torch
+from collections import OrderedDict
+from typing import OrderedDict as OrderedDictType
 from typing import Any, Dict, List, Tuple, Union, Optional, Callable
 
 logger = create_simple_logger(__name__)
@@ -431,6 +433,106 @@ class Hook:
         if self.__hook is not None:
             self.__hook.remove()
             self.__hook = None
+
+
+class ModuleHook:
+    def __init__(self, module: M, batch: Optional[int] = None) -> None:
+        self.hook = module.register_forward_hook(self.hook_fn)
+        self.module: M = None
+        self.features: T = None
+        self.batch = batch
+
+    def hook_fn(self, module, input, output):
+        self.module: M = module
+        self.features: T = output
+        if self.batch is not None:
+            self.features = self.features[self.batch : self.batch + 1]
+
+
+class MultiHook:
+    """A class that adds multiple hooks to a model. The hooks extract features from multiple layers in the model and calculate the loss using a loss function. This class can be used for the cases when features from multiple layers are required to calculate the loss. If features from a only a single layer is required, use the `Hook` class.
+
+    Parameters
+    ----------
+    layer_names : List[str]
+        The list of layer names in the model. Must be valid layer names in the model.
+    extractor_function : Callable[[T], T]
+        A custom function to extract features from the layer output. The function should take a list of tensors as input and return a tensor. The input will be a list of tensors where each tensor is the output of the corresponding layer in the `layer_names` list. The function must return a scalar tensor that is used as the loss.
+    extractor_function_kwargs : Optional[dict], optional
+        Keyword arguments to pass to the `extractor_function`, by default None.
+    batch : Optional[int], optional
+        The batch number to extract from the output. By default None which means that the whole output is passed to the extractor function (with shape batch*channels*height*width). If not None, the batch number is extracted from the output and passed to the extractor function. The resulting shape will be 1*channels*height*width.
+    """
+
+    def __init__(
+        self,
+        layer_names: List[str],
+        extractor_function: Callable[[T], List[T]],
+        extractor_function_kwargs: Optional[dict] = {},
+        batch: Optional[int] = None,
+    ) -> None:
+        self.layer_names = layer_names
+        self.extractor_function = extractor_function
+        self.extractor_function_kwargs = extractor_function_kwargs
+        self.batch = batch
+        self.features: OrderedDictType[str, ModuleHook] = OrderedDict()
+        self.loss = 0
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(layer_names={self.layer_names})"
+
+    def __str__(self) -> str:
+        return f"{self.__class__.__name__}(layer_names={self.layer_names})"
+
+    def has_hook(self) -> bool:
+        return len(self.features) > 0
+
+    def __call__(self, model: M) -> T:
+        if not self.has_hook():
+            logger.info("Adding hooks to model")
+            self.add_hook_multiple(model)
+
+        features = [hook.features for hook in self.features.values()]
+        if None in features:
+            msg = "No features found in any of the hooks. Make a forward pass on the model first."
+            logger.info(msg)
+            return 0
+
+        self.loss = self.extractor_function(features, **self.extractor_function_kwargs)
+        return self.loss
+
+    def add_hook_multiple(
+        self,
+        model: M,
+    ):
+        def hook_layers(net, prefix=[]):
+            if hasattr(net, "_modules"):
+                for name, layer in net._modules.items():
+
+                    # hook the layer if it is in the layer_names list
+                    if layer is None or name not in self.layer_names:
+                        continue
+
+                    self.features[".".join(prefix + [name])] = ModuleHook(
+                        layer, self.batch
+                    )
+                    hook_layers(layer, prefix=prefix + [name])
+
+        hook_layers(model)
+
+        # check if all layers have been hooked and warn if not
+        layers_with_hook = list(self.features.keys())
+        if len(layers_with_hook) == 0:
+            msg = f"Could not find any layers in model with names: {self.layer_names}"
+            logger.error(msg)
+            raise ValueError(msg)
+
+        layers_without_hook = [
+            layer for layer in self.layer_names if layer not in layers_with_hook
+        ]
+
+        if len(layers_without_hook) > 0:
+            logger.warning(f"Could not find layers: {layers_without_hook}")
 
 
 class Objective:
