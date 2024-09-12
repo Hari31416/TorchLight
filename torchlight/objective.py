@@ -551,9 +551,11 @@ class Objective:
 
     def __init__(
         self,
-        objective_func: Union[Hook, Callable[[M], T]],
+        objective_func: Union[Hook, Callable[[M], T], MultiHook],
         name: Optional[str] = None,
-        hook_objects: Optional[Union[Hook, List[Hook]]] = None,
+        hook_objects: Optional[
+            Union[Hook, List[Hook], MultiHook, List[MultiHook]]
+        ] = None,
     ):
         if isinstance(objective_func, Hook):
             # use the hook's __call__ method
@@ -562,7 +564,7 @@ class Objective:
             self.objective_func = objective_func
         if hook_objects is None:
             self.hook_objects = []
-        elif isinstance(hook_objects, Hook):
+        elif isinstance(hook_objects, (Hook, MultiHook)):
             self.hook_objects = [hook_objects]
         else:
             self.hook_objects = hook_objects
@@ -710,18 +712,58 @@ def create_objective(
     return Objective(hook.__call__, name or layer_channel_string, hook_objects=hook)
 
 
-def create_objective_from_function(
-    extractor_function: Callable[[T], T],
-    layer_name: str,
+def create_objective_with_multi_hook(
+    layer_names: List[str],
+    extractor_function: Callable[[List[T]], T],
+    extractor_function_kwargs: Optional[Dict[str, Any]] = {},
     batch: Optional[int] = None,
-    **kwargs: Dict[str, Any],
+    name: Optional[str] = None,
 ) -> Objective:
-    """Creates an objective function using a custom function. The custom function should take a tensor as input and return a tensor. The objective function will be created using the `Hook` class. The `extractor_function` must take a tensor as input and return a scalar tensor as output to be used as loss. The `layer_name` is the name of the layer in the model. The `kwargs` are keyword arguments to pass to the `extractor_function` via `extractor_function_kwargs` parameter. For more details, see the `Hook` class. The `batch` parameter is the batch number to extract from the output. If None, the first batch is used. Look at the `Hook` class for more details."""
-    hook = Hook(
-        layer_name,
+    """Creates an objective function using multiple layer names.
+
+    Parameters
+    ----------
+    layer_names : List[str]
+        The list of layer names.
+    extractor_function : Callable[[List[T]], T]
+        The loss function to calculate the loss from the extracted features. The function should take a list of tensors as input and return a scalar value.
+    extractor_function_kwargs : Optional[Dict[str, Any]], optional
+        Keyword arguments to pass to the `extractor_function`, by default None.
+    batch : Optional[int], optional
+        The batch number to extract from the output. By default None which means the first batch is used. See the `Hook` class for more details.
+    name : Optional[str], optional
+        The name of the objective function, by default None
+    """
+    multi_hook = MultiHook(
+        layer_names=layer_names,
         extractor_function=extractor_function,
-        extractor_function_kwargs=kwargs,
+        extractor_function_kwargs=extractor_function_kwargs,
         batch=batch,
     )
-    o = Objective(hook, name=extractor_function.__name__, hook_objects=hook)
+    return Objective(multi_hook.__call__, name or ", ".join(layer_names), multi_hook)
+
+
+def create_objective_from_function(
+    extractor_function: Callable[[Union[T, List[T]]], T],
+    layer_name: str,
+    batch: Optional[int] = None,
+    use_multi_hook: bool = False,
+    **kwargs: Dict[str, Any],
+) -> Objective:
+    """Creates an objective function using a custom function. The custom function should take a tensor (in case of using the `Hook` class) or a list of tensor (in case of `MultiHook` class) as input and return a tensor. The objective function will be created using the `Hook` or `MultiHook` class depending on parameter `use_multi_hook`. The `layer_name` is the name of the layer in the model. The `kwargs` are keyword arguments to pass to the `extractor_function` via `extractor_function_kwargs` parameter. The `batch` parameter is the batch number to extract from the output. For more details, see the `Hook` and `MultiHook` class."""
+    if use_multi_hook:
+        hook = MultiHook(
+            layer_names=[layer_name],
+            extractor_function=extractor_function,
+            extractor_function_kwargs=kwargs,
+            batch=batch,
+        )
+    else:
+        hook = Hook(
+            layer_name,
+            extractor_function=extractor_function,
+            extractor_function_kwargs=kwargs,
+            batch=batch,
+        )
+    o = Objective(hook.__call__, name=extractor_function.__name__, hook_objects=[hook])
     return o
