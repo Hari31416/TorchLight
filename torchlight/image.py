@@ -217,7 +217,7 @@ def get_image(
     h: Optional[int] = None,
     batch: Optional[int] = 1,
     sd: Optional[float] = 0.01,
-    decorrelate: bool = True,
+    decorrelate: bool = False,
     fft: bool = True,
     alpha=False,
     sigmoid: bool = False,
