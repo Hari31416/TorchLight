@@ -110,7 +110,7 @@ class FeatureViz:
         thresholds: Optional[Iterable[int]] = (128,),
         lr: float = 0.05,
         freq: int = 20,
-        use_decorrelated: bool = False,
+        use_decorrelated: bool = True,
         fft: bool = True,
         image_shape: Union[Tuple[int, int], Tuple[int, int, int], int] = (224, 224),
         plot_images: bool = False,
@@ -133,7 +133,7 @@ class FeatureViz:
         freq : int, optional
             The frequency of logging the loss and saving the image, by default 20.
         use_decorrelated : bool, optional
-            Whether to use the decorrelated color space, by default False.
+            Whether to use the decorrelated color space, by default True.
         fft : bool, optional
             Whether to use the Fast Fourier Transform (FFT) to create the image, by default True.
         image_shape : Union[Tuple[int, int], Tuple[int, int, int], int], optional

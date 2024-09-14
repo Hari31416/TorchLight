@@ -123,7 +123,7 @@ def linear_decorelate_color(t: T) -> T:
 
 def convert_to_valid_rgb(
     t: T,
-    decorrelate: bool = False,
+    decorrelate: bool = True,
     sigmoid: bool = True,
     scaling_method: Literal["min_max", "norm", "clamp"] = "min_max",
 ) -> T:
@@ -162,7 +162,7 @@ def cppn(
     num_hidden_channels: int = 24,
     num_layers: int = 8,
     activation_fn: nn.Module = CompositeActivation,
-    normalize: bool = False,
+    normalize: bool = True,
     device: str = DEFAULT_DEVICE,
 ) -> Tuple[List[nn.Parameter], Callable[[], T]]:
     """Generates a Convolutional Positional Pixel Network (CPPN) model with the given parameters. The model is initialized with weights from a normal distribution with mean 0 and standard deviation 1/sqrt(in_channels). The function returns the model's parameters and a function that generates an image from the model."""
@@ -217,10 +217,10 @@ def get_image(
     h: Optional[int] = None,
     batch: Optional[int] = 1,
     sd: Optional[float] = 0.01,
-    decorrelate: bool = False,
+    decorrelate: bool = True,
     fft: bool = True,
-    alpha=False,
-    sigmoid: bool = False,
+    alpha: bool = False,
+    sigmoid: bool = True,
     scaling_method: Literal["min_max", "norm", "clamp"] = "min_max",
     device: Optional[str] = DEFAULT_DEVICE,
 ) -> T:
