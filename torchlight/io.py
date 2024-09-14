@@ -14,7 +14,23 @@ from typing import List, Optional, Tuple, Union
 logger = create_simple_logger(__name__)
 
 
-def _normalize_array(array: A, domain: Optional[Tuple[float, float]] = None) -> A:
+def tensor_image_to_numpy_array(tensor_image: T) -> A:
+    """Convert a PyTorch tensor image to a NumPy array.
+
+    Parameters
+    ----------
+    tensor_image : torch.Tensor
+        The tensor image to convert.
+
+    Returns
+    -------
+    np.ndarray
+        The NumPy array of the tensor image.
+    """
+    return tensor_image.cpu().detach().numpy().transpose(1, 2, 0)
+
+
+def normalize_array(array: A, domain: Optional[Tuple[float, float]] = None) -> A:
     """Given an arbitrary rank-3 NumPy array, produce one representing an image.
 
     This ensures the resulting array has a dtype of uint8 and a domain of 0-255.
@@ -96,6 +112,83 @@ def _serialize_normalized_array(
     return image_data
 
 
+def save_images(
+    images: List[A],
+    save_path: str,
+    domain: Optional[Tuple[float, float]] = None,
+    save_type: str = "npy",
+) -> str:
+    """Save a list of images as numpy arrays or PNG files.
+
+    Parameters
+    ----------
+    images : List[np.ndarray]
+        The list of images to save.
+    save_path : str
+        The path to save the images.
+    domain : Tuple[float, float], optional
+        The domain of the input array, by default None. If None, the domain will be inferred from the array.
+    save_type : str, optional
+        The type of file to save, by default 'npy'. If 'npy', the images will be saved as a single numpy array. If 'png', the images will be saved as separate PNG files. The default is 'npy'. If 'png' is selected, the save_path should not include the file extension. If it does, the extension will be removed. If multiple images are saved, they will be saved with the format save_path_i.png.
+    """
+    images = [normalize_array(image, domain) for image in images]
+    if save_type == "npy":
+        images_array = np.stack(images)
+        np.save(save_path, images_array)
+
+    elif save_type == "png":
+        if ".png" in save_path:
+            save_path = save_path.replace(".png", "")
+        if len(images) == 1:
+            image = PIL.Image.fromarray(images[0])
+            image.save(f"{save_path}.png")
+        else:
+            for i, image in enumerate(images):
+                image = PIL.Image.fromarray(image)
+                image.save(f"{save_path}_{i}.png")
+    else:
+        raise ValueError(
+            f"Unsupported save type: {save_type}. Only 'npy' and 'png' are supported."
+        )
+
+
+def load_images(
+    image_paths: List[str],
+) -> List[A]:
+    """Load a list of images from file paths.
+
+    Parameters
+    ----------
+    image_paths : List[str]
+        The paths to the images to load.
+
+    Returns
+    -------
+    List[np.ndarray]
+        The list of images.
+    """
+    images = []
+    for path in image_paths:
+        if path.endswith(".npy"):
+            images_: A = np.load(path)
+            # convert to list of images if multiple images are saved in a single numpy array
+            if len(images_.shape) == 4:
+                images_ = images_.tolist()
+                images_ = [np.array(image) for image in images_]
+            else:
+                images_ = [images_]
+            images.extend(images_)
+        elif path.endswith(".png"):
+            image = PIL.Image.open(path)
+            image: A = np.array(image)
+            images.append(image)
+        else:
+            raise ValueError(
+                f"Unsupported file format: {path}. Only .npy and .png files are supported."
+            )
+    return images
+
+
 def serialize_array(
     array: A,
     domain: Optional[Tuple[float, float]] = None,
@@ -115,7 +208,7 @@ def serialize_array(
     quality : int, optional
         The compression quality from 0 to 100 for lossy formats, by default 70
     """
-    normalized = _normalize_array(array, domain=domain)
+    normalized = normalize_array(array, domain=domain)
     return _serialize_normalized_array(normalized, fmt=fmt, quality=quality)
 
 
