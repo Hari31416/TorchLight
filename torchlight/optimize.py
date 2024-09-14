@@ -24,22 +24,26 @@ from collections import OrderedDict
 logger = create_simple_logger(__name__)
 
 
-def remove_all_hooks(model: torch.nn.Module) -> None:
+def _remove_all_hooks_one_module(module: M, name: str) -> None:
+    if hasattr(module, "_forward_hooks"):
+        if module._forward_hooks != OrderedDict():
+            logger.debug(f"Removing forward hooks from {name}")
+            module._forward_hooks = OrderedDict()
+    elif hasattr(module, "_forward_pre_hooks"):
+        if module._forward_pre_hooks != OrderedDict():
+            logger.debug(f"Removing forward pre hooks from {name}")
+            module._forward_pre_hooks = OrderedDict()
+    elif hasattr(module, "_backward_hooks"):
+        if module._backward_hooks != OrderedDict():
+            logger.debug(f"Removing backward hooks from {name}")
+            module._backward_hooks = OrderedDict()
+
+
+def remove_all_hooks(model: M) -> None:
     """Remove all hooks from a neural network model."""
     for name, child in model._modules.items():
         if child is not None:
-            if hasattr(child, "_forward_hooks"):
-                if child._forward_hooks != OrderedDict():
-                    logger.debug(f"Removing forward hooks from {name}")
-                    child._forward_hooks = OrderedDict()
-            elif hasattr(child, "_forward_pre_hooks"):
-                if child._forward_pre_hooks != OrderedDict():
-                    logger.debug(f"Removing forward pre hooks from {name}")
-                    child._forward_pre_hooks = OrderedDict()
-            elif hasattr(child, "_backward_hooks"):
-                if child._backward_hooks != OrderedDict():
-                    logger.debug(f"Removing backward hooks from {name}")
-                    child._backward_hooks = OrderedDict()
+            _remove_all_hooks_one_module(child, name)
             remove_all_hooks(child)
 
 
@@ -82,6 +86,8 @@ class FeatureViz:
         self.model.to(self.device)
         if remove_existing_hooks:
             remove_all_hooks(self.model)
+            # remove hooks from the model itself
+            _remove_all_hooks_one_module(self.model, "model")
 
         if isinstance(objective, str):
             objective = create_objective(objective)
