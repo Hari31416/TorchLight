@@ -209,7 +209,7 @@ class Hook:
     Parameters
     ----------
     layer_name : str
-        The name of the layer in the model. Must be a valid layer name in the model.
+        The name of the layer in the model. Must be a valid layer name in the model. If you want to extract features from the output of the model, use the name `output`.
     channel_number : Optional[Union[int, List[int], Tuple[int, int], slice]], optional
         The channel number to extract from the layer output. The possible types are:
 
@@ -311,7 +311,10 @@ class Hook:
         self,
         model: M,
     ):
-        module = model.get_submodule(self.layer_name)
+        if self.layer_name == "output":
+            module = model
+        else:
+            module = model.get_submodule(self.layer_name)
         if module is None:
             raise ValueError(f"Layer {self.layer_name} not found in model")
 
