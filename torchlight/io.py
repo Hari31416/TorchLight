@@ -112,11 +112,61 @@ def _serialize_normalized_array(
     return image_data
 
 
+def numpy_image_to_video(
+    images: List[A], fps: int = 5, filename: str = "output.mp4"
+) -> None:
+    """Save a list of images as an MP4 video.
+
+    Parameters
+    ----------
+    images : List[np.ndarray]
+        The list of images to save.
+    fps : int, optional
+        The frames per second of the video, by default 5.
+    filename : str, optional
+        The path to save the video, by default 'output.mp4'.
+    """
+    images = [normalize_array(image) for image in images]
+    import cv2
+
+    h, w, _ = images[0].shape
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    out = cv2.VideoWriter(filename, fourcc, fps, (w, h))
+
+    for image in images:
+        out.write((image * 255).astype(np.uint8))
+
+    out.release()
+
+
+def numpy_image_to_gif(images: List[A], filename: str = "output.gif"):
+    """Saves a list of images as a GIF.
+
+    Parameters
+    ----------
+    images : List[np.ndarray]
+        The list of images to save.
+    filename : str, optional
+        The path to save the GIF, by default 'output.gif'.
+    """
+    images = [normalize_array(image) for image in images]
+
+    images = [PIL.Image.fromarray((image * 255).astype(np.uint8)) for image in images]
+    images[0].save(
+        filename,
+        save_all=True,
+        append_images=images[1:],
+        duration=100,
+        loop=0,
+    )
+
+
 def save_images(
     images: List[A],
     save_path: str,
     domain: Optional[Tuple[float, float]] = None,
     save_type: str = "npy",
+    fps: int = 5,
 ) -> str:
     """Save a list of images as numpy arrays or PNG files.
 
@@ -129,7 +179,15 @@ def save_images(
     domain : Tuple[float, float], optional
         The domain of the input array, by default None. If None, the domain will be inferred from the array.
     save_type : str, optional
-        The type of file to save, by default 'npy'. If 'npy', the images will be saved as a single numpy array. If 'png', the images will be saved as separate PNG files. The default is 'npy'. If 'png' is selected, the save_path should not include the file extension. If it does, the extension will be removed. If multiple images are saved, they will be saved with the format save_path_i.png.
+        The type of file to save, by default 'npy'. The possible values and their meanings are:
+
+        - 'npy': Save the images as a single numpy array.
+        - 'png': Save the images as individual PNG files. If a single image is provided, the name will be the same as the path. If multiple images are provided, the name will be the path with an index appended. (e.g. 'path_0.png', 'path_1.png', etc.)
+        - 'mp4': Save the images as an MP4 video. The path should include the file extension.
+        - 'gif': Save the images as a GIF. The path should include the file extension.
+
+    fps : int, optional
+        The frames per second of the video, by default 5. Only used if save_type is 'mp4'.
     """
     images = [normalize_array(image, domain) for image in images]
     if save_type == "npy":
@@ -146,10 +204,36 @@ def save_images(
             for i, image in enumerate(images):
                 image = PIL.Image.fromarray(image)
                 image.save(f"{save_path}_{i}.png")
+    elif save_type == "mp4":
+        numpy_image_to_video(images, filename=save_path, fps=fps)
+    elif save_type == "gif":
+        numpy_image_to_gif(images, filename=save_path)
     else:
         raise ValueError(
-            f"Unsupported save type: {save_type}. Only 'npy' and 'png' are supported."
+            f"Unsupported save type: {save_type}. Only 'npy', 'png', 'mp4' and 'gif' are supported."
         )
+
+
+def load_gif(gif_path: str) -> List[A]:
+    """Load a GIF file as a list of images.
+
+    Parameters
+    ----------
+    gif_path : str
+        The path to the GIF file.
+
+    Returns
+    -------
+    List[np.ndarray]
+        The list of images.
+    """
+    images = []
+    gif = PIL.Image.open(gif_path)
+    for frame in range(gif.n_frames):
+        gif.seek(frame)
+        image = np.array(gif)
+        images.append(image)
+    return images
 
 
 def load_images(
@@ -160,7 +244,7 @@ def load_images(
     Parameters
     ----------
     image_paths : List[str]
-        The paths to the images to load.
+        The paths to the images to load. The supported file formats are .npy, .png and .gif.
 
     Returns
     -------
@@ -182,9 +266,12 @@ def load_images(
             image = PIL.Image.open(path)
             image: A = np.array(image)
             images.append(image)
+        elif path.endswith(".gif"):
+            images_ = load_gif(path)
+            images.extend(images_)
         else:
             raise ValueError(
-                f"Unsupported file format: {path}. Only .npy and .png files are supported."
+                f"Unsupported file format: {path}. Only .npy, .png and .gif files are supported."
             )
     return images
 
