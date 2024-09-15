@@ -176,7 +176,6 @@ def save_images(
     images: List[A],
     save_path: str,
     domain: Optional[Tuple[float, float]] = None,
-    save_type: str = "npy",
     fps: int = 5,
 ) -> str:
     """Save a list of images as numpy arrays or PNG files.
@@ -186,20 +185,19 @@ def save_images(
     images : List[np.ndarray]
         The list of images to save.
     save_path : str
-        The path to save the images.
-    domain : Tuple[float, float], optional
-        The domain of the input array, by default None. If None, the domain will be inferred from the array.
-    save_type : str, optional
-        The type of file to save, by default 'npy'. The possible values and their meanings are:
+        The path to save the images. The supported file formats are .npy, .png, .mp4 and .gif.
 
         - 'npy': Save the images as a single numpy array.
         - 'png': Save the images as individual PNG files. If a single image is provided, the name will be the same as the path. If multiple images are provided, the name will be the path with an index appended. (e.g. 'path_0.png', 'path_1.png', etc.)
         - 'mp4': Save the images as an MP4 video. The path should include the file extension.
         - 'gif': Save the images as a GIF. The path should include the file extension.
 
+    domain : Tuple[float, float], optional
+        The domain of the input array, by default None. If None, the domain will be inferred from the array.
     fps : int, optional
-        The frames per second of the video, by default 5. Only used if save_type is 'mp4'.
+        The frames per second of the video, by default 5. Only used a video is saved.
     """
+    save_type = save_path.split(".")[-1]
     images = [normalize_array(image, domain) for image in images]
     if save_type == "npy":
         images_array = np.stack(images)
