@@ -113,7 +113,10 @@ def _serialize_normalized_array(
 
 
 def numpy_image_to_video(
-    images: List[A], fps: int = 5, filename: str = "output.mp4"
+    images: List[A],
+    fps: int = 5,
+    filename: str = "output.mp4",
+    domain: Optional[Tuple[float, float]] = None,
 ) -> None:
     """Save a list of images as an MP4 video.
 
@@ -126,7 +129,7 @@ def numpy_image_to_video(
     filename : str, optional
         The path to save the video, by default 'output.mp4'.
     """
-    images = [normalize_array(image) for image in images]
+    images = [normalize_array(image, domain=domain) for image in images]
     import cv2
 
     h, w, _ = images[0].shape
@@ -134,12 +137,18 @@ def numpy_image_to_video(
     out = cv2.VideoWriter(filename, fourcc, fps, (w, h))
 
     for image in images:
-        out.write((image * 255).astype(np.uint8))
+        # change from RGB to BGR, as OpenCV expects BGR
+        image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+        out.write(image)
 
     out.release()
 
 
-def numpy_image_to_gif(images: List[A], filename: str = "output.gif"):
+def numpy_image_to_gif(
+    images: List[A],
+    filename: str = "output.gif",
+    domain: Optional[Tuple[float, float]] = None,
+):
     """Saves a list of images as a GIF.
 
     Parameters
@@ -149,9 +158,11 @@ def numpy_image_to_gif(images: List[A], filename: str = "output.gif"):
     filename : str, optional
         The path to save the GIF, by default 'output.gif'.
     """
-    images = [normalize_array(image) for image in images]
+    import PIL.Image
 
-    images = [PIL.Image.fromarray((image * 255).astype(np.uint8)) for image in images]
+    images = [normalize_array(image, domain=domain) for image in images]
+
+    images = [PIL.Image.fromarray(image) for image in images]
     images[0].save(
         filename,
         save_all=True,
