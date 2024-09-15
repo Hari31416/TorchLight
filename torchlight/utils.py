@@ -8,7 +8,6 @@ import matplotlib.axes
 from typing import List, Union, Any, Callable, Optional, Dict
 import logging
 from PIL import Image
-import wandb
 from IPython.display import display
 from collections import OrderedDict
 
@@ -192,7 +191,7 @@ def create_wandb_logger(
     group: Union[str, None] = None,
     job_type: str = "",
     logger: Union[logging.Logger, None] = None,
-) -> wandb.sdk.wandb_run.Run:
+) -> Any:
     """Creates a new run on Weights & Biases and returns the run object.
 
     Parameters
@@ -219,6 +218,8 @@ def create_wandb_logger(
     wandb.Run
         The run object.
     """
+    import wandb
+
     logger = logger or create_simple_logger("create_wandb_logger")
     if config is None:
         logger.debug("No config provided. Using an empty config.")
