@@ -119,6 +119,7 @@ class FeatureViz:
         log_loss: bool = False,
         extra_transformations: Optional[List[Callable[[T], T]]] = None,
         preprocess: bool = True,
+        apply_default_transformations: bool = True,
     ) -> List[T]:
         """Main method to visualize the features of the neural network.
 
@@ -150,6 +151,8 @@ class FeatureViz:
             A list of extra transformations to apply to the image, by default None.
         preprocess : bool, optional
             Whether to apply the default preprocessing to the image, by default True. If True, the default preprocessing will be applied to the image before passing it to the neural network.
+        apply_default_transformations : bool, optional
+            Whether to apply the default transformations to the image, by default True. If True, the default transformations will be applied to the image before apply any extra transformations.
 
         Returns
         -------
@@ -203,7 +206,8 @@ class FeatureViz:
 
             transformed_image = apply_transformations(
                 image_f(),
-                extra_transformations=extra_transformations_,
+                transforms_to_apply=extra_transformations_,
+                apply_default_transformations=apply_default_transformations,
             ).to(self.device)
 
             optimizer.zero_grad()

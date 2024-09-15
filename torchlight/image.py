@@ -323,11 +323,20 @@ DEFAULT_TRANSFORMATIONS = [
 
 
 def apply_transformations(
-    image: T, extra_transformations: Optional[List[A]] = None
+    image: T,
+    transforms_to_apply: Optional[List[Callable[[T], T]]] = None,
+    apply_default_transformations: bool = False,
 ) -> T:
-    transformations = DEFAULT_TRANSFORMATIONS
-    if extra_transformations:
-        transformations = transformations + extra_transformations
+    if apply_default_transformations:
+        transformations = DEFAULT_TRANSFORMATIONS
+    else:
+        transformations = []
+    if transforms_to_apply:
+        transformations = transformations + transforms_to_apply
+    if len(transformations) == 0:
+        # nothing to do
+        return image
+
     for transform in transformations:
         image = transform(image)
     return image
