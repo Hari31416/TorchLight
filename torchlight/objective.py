@@ -1,6 +1,7 @@
 from torchlight.utils import create_simple_logger, M, T, A
 
 import torch
+import numpy as np
 from collections import OrderedDict
 from typing import OrderedDict as OrderedDictType
 from typing import Any, Dict, List, Tuple, Union, Optional, Callable
@@ -201,6 +202,39 @@ def neuron_direction_in_channel(
         f"Channel output shape: {channel_output.shape}, Direction shape: {direction.shape}, Cosine similarity shape: {out.shape}"
     )
     return -torch.mean(out)
+
+
+def channel_interpolate(
+    layer_outputs: Union[T, List[T]], channel_indices: List[int]
+) -> T:
+    """Interpolates between two channels in the same layer output or two different layers."""
+    if len(channel_indices) != 2:
+        raise ValueError("Two channel indices are required for interpolation")
+
+    # single layer output provided (for `Hook`), use the same layer output for both channels
+    if isinstance(layer_outputs, T):
+        layer_outputs = [layer_outputs, layer_outputs]
+
+    # If a single layer output is provided, use the same layer output for both channels
+    # This assumes that interpolation is only between two channels in the same layer
+    if len(layer_outputs) == 1:
+        layer_outputs = [layer_outputs[0], layer_outputs[0]]
+
+    batch_n = len(layer_outputs[0])
+
+    outs_1 = [
+        -torch.mean(layer_outputs[0][n, channel_indices[0], ...])
+        for n in range(batch_n)
+    ]
+    outs_2 = [
+        -torch.mean(layer_outputs[1][n, channel_indices[1], ...])
+        for n in range(batch_n)
+    ]
+    weights = np.arange(batch_n) / (batch_n - 1)
+    loss = 0
+    for n in range(batch_n):
+        loss += (1 - weights[n]) * outs_1[n] + weights[n] * outs_2[n]
+    return loss
 
 
 class Hook:
