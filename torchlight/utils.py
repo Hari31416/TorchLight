@@ -19,6 +19,7 @@ END = "\033[0m"
 BOLD = "\033[1m"
 BROWN = "\033[0;33m"
 ITALIC = "\033[3m"
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def set_logger_level_to_all_local(level: int) -> None:

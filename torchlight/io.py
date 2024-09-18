@@ -1,8 +1,9 @@
 # Sources
 # https://github.com/greentfrapp/lucent/blob/dev/lucent/misc/io/serialize_array.py
 # https://github.com/greentfrapp/lucent/blob/dev/lucent/misc/io/showing.py
-from .utils import create_simple_logger, T, A
+from .utils import create_simple_logger, T, A, DEVICE
 
+import torch
 import base64
 import numpy as np
 import PIL.Image
@@ -624,3 +625,32 @@ def animate_sequence(
         title=title,
     )
     _display_html(code)
+
+
+def load_image(
+    path: str,
+    h: Optional[int] = None,
+    w: Optional[int] = None,
+    return_as_tensor: bool = True,
+    device: str = DEVICE,
+):
+    """Loads an image from a given path and resizes it to the given dimensions. Returns the image as a numpy array."""
+    image = PIL.Image.open(path)
+    if h is not None or w is not None:
+        h = h or image.size[1]
+        w = w or image.size[0]
+
+        image = image.resize((w, h))
+
+    image = np.array(image)
+    image = image / 255.0
+    if not return_as_tensor:
+        return image
+
+    image = (
+        torch.tensor(np.transpose(image, [2, 0, 1]))
+        .unsqueeze(0)  # batch dimension
+        .float()
+        .to(device)
+    )
+    return image
