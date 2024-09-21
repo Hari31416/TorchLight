@@ -785,21 +785,21 @@ def create_objective_from_function(
     layer_name: str,
     batch: Optional[int] = None,
     use_multi_hook: bool = False,
-    **kwargs: Dict[str, Any],
+    extractor_function_kwargs: Dict[str, Any] = {},
 ) -> Objective:
     """Creates an objective function using a custom function. The custom function should take a tensor (in case of using the `Hook` class) or a list of tensor (in case of `MultiHook` class) as input and return a tensor. The objective function will be created using the `Hook` or `MultiHook` class depending on parameter `use_multi_hook`. The `layer_name` is the name of the layer in the model. The `kwargs` are keyword arguments to pass to the `extractor_function` via `extractor_function_kwargs` parameter. The `batch` parameter is the batch number to extract from the output. For more details, see the `Hook` and `MultiHook` class."""
     if use_multi_hook:
         hook = MultiHook(
             layer_names=[layer_name],
             extractor_function=extractor_function,
-            extractor_function_kwargs=kwargs,
+            extractor_function_kwargs=extractor_function_kwargs,
             batch=batch,
         )
     else:
         hook = Hook(
             layer_name,
             extractor_function=extractor_function,
-            extractor_function_kwargs=kwargs,
+            extractor_function_kwargs=extractor_function_kwargs,
             batch=batch,
         )
     o = Objective(hook.__call__, name=extractor_function.__name__, hook_objects=[hook])
