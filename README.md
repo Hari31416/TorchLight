@@ -49,6 +49,7 @@ The module implemets methods to get parameterize image, combine objectives in an
 ### Positive and Negative Optimization
 
 ```python
+from torchlight.io import show_images
 # create two objectives with the same layer and channel
 objective_1 = create_objective("mixed4b:154", batch=0)
 objective_2 = create_objective("mixed4b:154", batch=1)
@@ -60,7 +61,8 @@ fv = FeatureViz(model=model, objective=objective)
 # create a parameterize image with two batches
 param_f = lambda: get_image(w=224, batch=2, decorrelate=True)
 
-images = fv.visualize(param_f, show_last_image=True, show_progress=True, thresholds=[512, 1024, 2048], lr=0.05)
+images = fv.visualize(param_f, show_last_image=True, show_progress=True, thresholds=[512, 1024], lr=0.05)
+show_images(images[-1], ["Positive", "Negative"])
 ```
 
 This will create an image that maximizes the activation for the first image and minimizes the activation for the second image. The optimized images are:
@@ -70,7 +72,6 @@ This will create an image that maximizes the activation for the first image and 
 ### Interpolate Between two Channels
 
 ```python
-from torchlight.io import show_images
 # Choose two channels to interpolate between
 neuron1 = "mixed4a:479"
 neuron2 = "mixed4b:360"
@@ -90,7 +91,7 @@ images = fv.visualize(
     param_f,
     show_last_image=False,
     show_progress=True,
-    thresholds=[512, 1024, 2048],
+    thresholds=[512, 1024],
     lr=0.05,
 )
 # show the images with the two neurons and the interpolation
