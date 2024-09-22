@@ -247,20 +247,23 @@ def load_gif(gif_path: str) -> List[A]:
 
 
 def load_images(
-    image_paths: List[str],
+    image_paths: Union[str, List[str]],
+    return_as_numpy: bool = False,
 ) -> List[A]:
     """Load a list of images from file paths.
 
     Parameters
     ----------
-    image_paths : List[str]
-        The paths to the images to load. The supported file formats are .npy, .png and .gif.
+    image_paths :  Union[str, List[str]],
+        The path(s) to the images to load. The supported file formats are .npy, .png and .gif.
 
     Returns
     -------
     List[np.ndarray]
         The list of images.
     """
+    if isinstance(image_paths, str):
+        image_paths = [image_paths]
     images = []
     for path in image_paths:
         if path.endswith(".npy"):
@@ -283,6 +286,8 @@ def load_images(
             raise ValueError(
                 f"Unsupported file format: {path}. Only .npy, .png and .gif files are supported."
             )
+    if return_as_numpy:
+        images = np.stack(images)
     return images
 
 
