@@ -1,4 +1,3 @@
-import numpy as np
 from torchlight.image import (
     apply_transformations,
     get_image,
@@ -15,10 +14,9 @@ from torchlight.objective import create_objective, Objective, T, M
 
 import torch
 import torch.optim as optim
-
+import numpy as np
 from tqdm.auto import tqdm
 from typing import Any, Iterable, Optional, List, Union, Tuple, Callable
-import logging
 from collections import OrderedDict
 
 logger = create_simple_logger(__name__)

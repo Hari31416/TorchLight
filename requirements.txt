@@ -1,0 +1,11 @@
+torch>=2.0.0
+torchvision==0.19.1
+tqdm
+numpy
+ipython
+pillow
+matplotlib
+
+## Optional Dependencies ##
+# pytest
+# wandb
